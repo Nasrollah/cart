@@ -1,0 +1,9 @@
+&inputs
+ fluxorder=6,    !< order for central difference physical flux
+ dissorder=6,    !< order for central difference dissipation
+ disscoef=0.1d0, !< coefficient for dissipation
+ viscorder=4,    !< order for viscous terms
+ scheme='central', !< type of scheme, 'central' or 'upwind'
+ reconstruction='muscl' !< reconstruction type 'muscl' or 'weno5'
+ istor='row',  !< storage type 'row' or 'column'   
+&end
