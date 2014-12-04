@@ -5,8 +5,4 @@
 *.pyf
 *.mod
 *.so
-cartTS/test/*.err
-cartTS/test/*.out
-cartTS/test/*.dat
-cartTS/test/outputs/cartTS/*
-cartTS/test/temp.sbatch
+BUILD

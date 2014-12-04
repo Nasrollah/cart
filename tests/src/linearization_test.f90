@@ -76,12 +76,12 @@ program linearizationTest
   !
   ! initialize data
   !
-  call init_data(q,fsmach,alpha,beta,gamma,jmax,kmax,lmax)
+  call init_data(q,fsmach,alpha,beta,gamma,jmax,kmax,lmax,nq,'row')
   call random_seed()
   call random_number(ddq)
 !  q = q + 5e-4*ddq
   
-  call init_metrics(spaceMetric,timeMetric,dx,dy,dz,jmax,kmax,lmax)
+  call init_metrics(spaceMetric,timeMetric,dx,dy,dz,jmax,kmax,lmax,'row')
   !
   t=0
   !

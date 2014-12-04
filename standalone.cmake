@@ -9,6 +9,7 @@ ENDIF()
 IF(COMPILER_FAMILY STREQUAL "intel")
     message("Using Intel compiler family.")
     SET(CMAKE_C_FLAGS "-fPIC -O2")
+    SET(CMAKE_Fortran_FLAGS "-r8 -fPIC -convert big_endian -fp-model source -vec-report0")
     #SET(CMAKE_Fortran_FLAGS "-r8 -fPIC -convert big_endian -CB -traceback")
     #-check uninit -traceback -fpe0 -vec-report0 -check pointers -check uninit")
     #SET(CMAKE_Fortran_FLAGS "-r8 -fPIC -DINTEL -O2 -fpp -convert big_endian -align sequence -heap-arrays 10 -vec-report0 -fpe0 -traceback  -check bounds -check pointers -check uninit -warn interfaces -gen-interfaces nosource")
@@ -39,9 +40,9 @@ STRING(REGEX REPLACE "bin.*" "bin/f2py"
 STRING(REGEX REPLACE "bin.*" "lib/python${PYVER}/site-packages/numpy/f2py/src"
                              NUMPY_SRC ${PYTHON_EXECUTABLE})
 set(F2PYBIN f2py)
-set(NUMPY_SRC /usr/local/lib/python2.7/site-packages/numpy/f2py/src/)
-set(NUMPY_INCLUDE /usr/local/lib/python2.7/site-packages/numpy/core/include/)
-set(PYTHON_INCLUDE /usr/local/include/python2.7 )
+set(NUMPY_SRC      /glade/apps/opt/numpy/1.7.1/intel-autodispatch/13.0.1/lib/python2.7/site-packages/numpy/f2py/src/)
+set(NUMPY_INCLUDE  /glade/apps/opt/numpy/1.7.1/intel-autodispatch/13.0.1/lib/python2.7/site-packages/numpy/core/include/)
+set(PYTHON_INCLUDE /glade/apps/opt/python/2.7.5/gnu-westmere/4.7.2/include/python2.7 )
 #STRING(REGEX REPLACE "bin.*"
 #                     "lib/python${PYVER}/site-packages/numpy/core/include"
 #                     NUMPY_INCLUDE ${PYTHON_EXECUTABLE})
