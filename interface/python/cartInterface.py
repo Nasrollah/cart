@@ -52,15 +52,19 @@ class cartModule:
                    'tcomm_ts-data':self.cart.tcomm_ts}
 	os.chdir('../..')
 
-    def rhs(self,viscous=False,bdf=True):
+    #def rhs(self,viscous=False,bdf=True):
+    #    self.cart.cart_rhs_inviscid()
+    #    if viscous:
+    #        self.cart.cart_rhs_viscous()
+	#if bdf:
+	 #   self.cart.cart_bdf_source()
+
+    def rhs(self):
         self.cart.cart_rhs_inviscid()
-        if viscous:
-            self.cart.cart_rhs_viscous()
-	if bdf:
-	    self.cart.cart_bdf_source()
 
     def lhs(self,it):
         self.cart.cart_lhs(it)
+
     def update_time(self):
 	self.cart.cart_update_time()
         
@@ -68,12 +72,7 @@ class cartModule:
         self.cart.cart_init_param(cfl,bctyp,jmax,kmax,lmax,irhs,ilhs)
     
     def computeNorm(self,rres_two,qres_two,rres_inf,qres_inf):
-        print "computeNorm from python level not implemented"
-        pass
-        # FIX me
-        # didn't implement this yet from Josh's code
-        #
-	#self.cart.ts_compute_norm(rres_two,qres_two,rres_inf,qres_inf)
+	self.cart.ts_compute_norm(rres_two,qres_two,rres_inf,qres_inf)
 
     def outputData(self):
 	os.chdir('outputs/'+self.modulename)

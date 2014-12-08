@@ -18,7 +18,7 @@ module cartInterface
   real*8  :: beta=0.d0
   real*8  :: gamma=1.4d0
   real*8  :: amp,freq
-  real*8  :: norm
+  real*8  :: norm,norm_two,norm_inf
   integer :: numprocs,myid,ierr
   real*8 :: tm(3)
   integer :: nq,nvar
@@ -86,7 +86,7 @@ contains
   !!
   subroutine cart_mpi_init
     implicit none
-    call mpi_init(ierr)
+    !call mpi_init(ierr)
     call mpi_comm_size(mpi_comm_world,numprocs,ierr)
     call mpi_comm_rank(mpi_comm_world,myid,ierr)
     ninstances=numprocs
@@ -373,6 +373,35 @@ contains
     tcomp_lhs    = tcomp_lhs    + t_end - t_start
     !
   end subroutine cart_lhs
+  !!                                                                                                 
+  !> compute norm on dq and rhs                                                                      
+  !!                                                                                                 
+  subroutine ts_compute_norm(rhs_res_two,dq_res_two,rhs_res_inf,dq_res_inf)
+    !use tsglobalvar
+    implicit none
+    real*8, intent(inout) :: rhs_res_two,dq_res_two,rhs_res_inf,dq_res_inf
+    
+    !> Evaluate norm of dq (2 and Inf)                                                                                                                                                                
+    call compute_norm_two(dq_res_two,rhs,jmax,kmax,lmax,ninstances)
+    call compute_norm_inf(dq_res_inf,rhs,jmax,kmax,lmax,ninstances)
+
+    !> Call Spatial Residual                                                                         
+    if (irhs.eq.0) then
+       call inviscidRHSunified(nq,nvar,gamma,q,rhs,spec,timeMetric,dx,dy,dz,jmax,kmax,lmax,&
+            fluxOrder,dissOrder,dissCoef,'row')
+    elseif (irhs.eq.1) then
+       call inviscidRHSupwind(nq,nvar,gamma,q,rhs,spec,timeMetric,dx,dy,dz,jmax,kmax,lmax,&
+            'muscl','row')
+    endif
+    
+    !> Add Temporal                                                                                  
+    call ts_source_term(q,rhs,vol,myid,ninstances,jmax,kmax,lmax)
+    
+    !> Evaluate norm of rhs (2 and Inf)                                                              
+    call compute_norm_two(rhs_res_two,rhs,jmax,kmax,lmax,ninstances)
+    call compute_norm_inf(rhs_res_inf,rhs,jmax,kmax,lmax,ninstances)
+    
+  end subroutine ts_compute_norm
   !!
   !> output data in plot3d format
   !!

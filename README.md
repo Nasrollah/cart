@@ -2,3 +2,37 @@ cart
 ====
 
 High-Order Cartesian Flow Solver
+
+Testing and demos:
+-----------------
+INSTALL_DIR is the directory where you told CMAKE to install the
+executable. See file "BUILDING" for  example on specifying the
+INSTALL directory. 
+
+1. Accuracy check
+   verifies accuracy of the discretized Navier-Stokes 
+   against exact divergence using complex arithemetic using 
+   method of manufactured solutions
+
+   cd $INSTALL_DIR/tests/accuracy;
+   ../../bin/nscheck.exe < verify.input
+
+2. Linearization test
+   verifies consistency of the linearization of the 2nd order inviscid terms (for now
+   cd $INSTALL_DIR/tests/linearization
+   ../../bin/linearization_test 
+
+3. F90 executable demo
+
+   cd $INSTALL_DIR/demo/example;
+   ../../bin/cart.exe
+
+   Runs the Taylor-Green problem for 10 steps
+
+4. python execution demo
+
+   cd $INSTALL_DIR/demo/python_example
+   python test.py
+    
+   Runs Taylor-Green through python
+

@@ -12,4 +12,5 @@ src/rhs/roeflxcart.f90
 src/rhs/velocityGradient.f90
 src/rhs/viscousRHS.f90
 src/rhs/viscousRHSfast.f90
-src/rhs/weno.f90)
+src/rhs/weno.f90
+src/rhs/ts_source.f90)
