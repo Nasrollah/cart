@@ -52,15 +52,15 @@ class cartModule:
                    'tcomm_ts-data':self.cart.tcomm_ts}
 	os.chdir('../..')
 
-    #def rhs(self,viscous=False,bdf=True):
-    #    self.cart.cart_rhs_inviscid()
-    #    if viscous:
-    #        self.cart.cart_rhs_viscous()
-	#if bdf:
-	 #   self.cart.cart_bdf_source()
-
-    def rhs(self):
+    def rhs(self,viscous=False,bdf=True):
         self.cart.cart_rhs_inviscid()
+        if viscous:
+            self.cart.cart_rhs_viscous()
+	if bdf:
+	    self.cart.cart_bdf_source()
+
+    #def rhs(self):
+    #    self.cart.cart_rhs_inviscid()
 
     def lhs(self,it):
         self.cart.cart_lhs(it)

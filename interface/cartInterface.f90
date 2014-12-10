@@ -38,10 +38,7 @@ module cartInterface
   integer :: ninstances
 
 contains
-  subroutine cart_param_input
-    namelist /inputs/ nsteps,fluxOrder,dissOrder,dissCoef,CFL,dt,ivisc,viscorder,&
-         jmax,kmax,lmax,fsmach,rey,pr,prtr,nq,nsubiter,timeIntegrator,nsave,istor,icase,&
-	 ilhs,irhs
+  subroutine cart_set_defaults
     !
     ! default inputs
     !
@@ -52,11 +49,12 @@ contains
     disscoef=0.1
     CFL=2.0
     dt=0.1
-    nq=6
+    nq=5
+    nvar=5
     rey=1e6
     ivisc=0
     viscorder=4
-    timeIntegrator='bdf2'
+    timeIntegrator='ts'
     nsubiter=5
     jmax=40
     kmax=40
@@ -66,6 +64,14 @@ contains
     icase='taylor-green'
     ilhs=0
     irhs=0
+  end subroutine cart_set_defaults
+    
+  subroutine cart_param_input
+    namelist /inputs/ nsteps,fluxOrder,dissOrder,dissCoef,CFL,dt,ivisc,viscorder,&
+         jmax,kmax,lmax,fsmach,rey,pr,prtr,nq,nsubiter,timeIntegrator,nsave,istor,icase,&
+	 ilhs,irhs
+    !
+    call cart_set_defaults
     ! 
     open(unit=1,file='cart.input',form='formatted',err=1000)
     read(1,inputs)
@@ -168,6 +174,7 @@ contains
        enddo
     endif
     !
+    write(6,*) '#### jmax,kmax,lmax=',jmax,kmax,lmax,nq
     call storep3d(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
     !
     ! initialize data
@@ -235,6 +242,8 @@ contains
     !
     real*8,  intent(in) :: cfl1
     integer, intent(in) :: bctyp1,jmax1,kmax1,lmax1,irhs1,ilhs1
+    !
+    call cart_set_defaults
     !
     cfl   = cfl1
     bctyp = bctyp1
@@ -369,7 +378,7 @@ contains
     endif
     !> Update Solution    
     q=q+rhs/vol
-    write(6,*) n,it,norm
+    if (myid==0) write(6,*) n,it,norm
     tcomp_lhs    = tcomp_lhs    + t_end - t_start
     !
   end subroutine cart_lhs

@@ -1,6 +1,7 @@
 import os
 import sys
 sys.path.append('../../bin')
+from mpi4py import MPI
 from cartInterface import cartModule
 #
 nsteps=10
