@@ -20,11 +20,11 @@ cmake -DCOMPILER_FAMILY=<gnu,intel,portland> -DINSTALL_DIR=<installation_directo
 make -j4
 make install 
 
-Here is the example I used from my bash_history
+Here is the example I used from my csh_history
  2225  mkdir BUILD
  2226  cd BUILD/
- 2227  export CC=mpicc;export CXX=mpicxx;export FC=mpif90;
- 2228  cmake -DCOMPILER_FAMILY=gnu -DINSTALL_DIR=/home/jay/code/cart /home/jay/cart
+ 2227  setenv CC=mpicc;setenv CXX=mpicxx;setenv FC=mpif90;
+ 2228  cmake -DCOMPILER_FAMILY=install -DINSTALL_DIR=/home/jay/code/cart ..
  2229  make -j4
  2230  make install
 
