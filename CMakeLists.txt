@@ -75,8 +75,8 @@ ADD_SUBDIRECTORY(interface)
 # install all the required files in 
 # the installation directory
 #
-INSTALL(FILES ${CART_SOURCE}/README 
-  DESTINATION ${INSTALL_DIR})
+INSTALL(FILES ${CART_SOURCE}/README.md
+  DESTINATION ${INSTALL_DIR}/README)
 INSTALL(FILES ${CART_SOURCE}/interface/python/cartInterface.py 
   DESTINATION ${INSTALL_DIR}/bin)
 INSTALL(FILES ${CART_BUILD}/python/cart.so 
