@@ -1,7 +1,7 @@
 module cartInterface
   !
   include 'mpif.h'
-  real*8, allocatable :: q(:,:,:,:),x(:,:,:,:),spec(:,:,:)
+  real*8, allocatable :: q(:,:,:,:),dq(:,:,:,:),x(:,:,:,:),spec(:,:,:)
   real*8, allocatable :: qn(:,:,:,:),qnm1(:,:,:,:)
   real*8, allocatable :: rhs(:,:,:,:),qstar(:,:,:,:) ,qwork(:,:,:,:)
   real*8, allocatable :: spaceMetric(:,:,:,:),timeMetric(:,:,:,:)
@@ -18,7 +18,7 @@ module cartInterface
   real*8  :: beta=0.d0
   real*8  :: gamma=1.4d0
   real*8  :: amp,freq
-  real*8  :: norm,norm_two,norm_inf
+  real*8  :: norm,norm_two,norm_inf,norm_rhs,norm_dq
   integer :: numprocs,myid,ierr
   real*8 :: tm(3)
   integer :: nq,nvar
@@ -30,25 +30,25 @@ module cartInterface
   integer :: viscorder
   integer :: nsubiter
   integer :: nsave
-  real*8  :: tscal,pi
+  real*8  :: tscal
   real*8  :: xx0(3)
   character*16 :: timeIntegrator,icase
   character*6 :: istor
   real*8  :: t_total,s_total,tcomp_solver,tcomp_rhs,tcomp_lhs,tcomp_ts,tcomm_ts
   integer :: ninstances
-
+  real,parameter :: pi=acos(-1.)
 contains
   subroutine cart_set_defaults
     !
     ! default inputs
     !
     nsteps=20
-    fsmach=0.1
-    fluxorder=6
-    dissorder=6
-    disscoef=0.1
-    CFL=2.0
-    dt=0.1
+    fsmach=0.5
+    fluxorder=2
+    dissorder=4
+    disscoef=0.5
+    CFL=1.0
+    dt=1e6
     nq=5
     nvar=5
     rey=1e6
@@ -62,7 +62,7 @@ contains
     nsave=100
     istor='row'
     icase='taylor-green'
-    ilhs=0
+    ilhs=1
     irhs=0
   end subroutine cart_set_defaults
     
@@ -114,7 +114,7 @@ contains
     tcomm_ts     = 0.0
     !
     if (istor=='row') then
-       allocate(q(nq,jmax,kmax,lmax),rhs(nq,jmax,kmax,lmax),x(3,jmax,kmax,lmax))
+       allocate(q(nq,jmax,kmax,lmax),dq(nq,jmax,kmax,lmax),rhs(nq,jmax,kmax,lmax),x(3,jmax,kmax,lmax))
        allocate(qn(nq,jmax,kmax,lmax),qnm1(nq,jmax,kmax,lmax))
        allocate(spec(jmax,kmax,lmax))
        allocate(qstar(nq,jmax,kmax,lmax))
@@ -123,7 +123,7 @@ contains
        allocate(timeMetric(3,jmax,kmax,lmax))
        allocate(tscale(jmax,kmax,lmax))
     else
-       allocate(q(jmax,kmax,lmax,nq),rhs(jmax,kmax,lmax,nq),x(jmax,kmax,lmax,3))
+       allocate(q(jmax,kmax,lmax,nq),dq(jmax,kmax,lmax,nq),rhs(jmax,kmax,lmax,nq),x(jmax,kmax,lmax,3))
        allocate(qn(jmax,kmax,lmax,nq),qnm1(jmax,kmax,lmax,nq))
        allocate(spec(jmax,kmax,lmax))
        allocate(qstar(jmax,kmax,lmax,nq))
@@ -133,17 +133,24 @@ contains
        allocate(tscale(jmax,kmax,lmax))   
     endif
     !
-    if (icase=='vortex') then
-       dx=20./(jmax)
-       dy=15./(kmax)
+    if (timeIntegrator.ne.'ts') then
+       if (icase=='vortex') then
+          dx=20./(jmax)
+          dy=15./(kmax)
+          dz=10./(lmax)
+          xx0=5d0
+       else
+          !pi=acos(-1.)
+          dx=2*pi/(jmax)
+          dy=2*pi/(kmax)
+          dz=2*pi/(lmax)
+          xx0=pi
+       endif
+    else
+       dx=10./(jmax)
+       dy=10./(kmax)
        dz=10./(lmax)
        xx0=5d0
-    else
-       pi=acos(-1.)
-       dx=2*pi/(jmax)
-       dy=2*pi/(kmax)
-       dz=2*pi/(lmax)
-       xx0=pi
     endif
     !
     vol=dx*dy*dz
@@ -179,6 +186,7 @@ contains
     !
     ! initialize data
     !
+    freq=1.
     call init_data(q,fsmach,alpha,beta,gamma,jmax,kmax,lmax,nq,istor)
     if (timeIntegrator .ne. 'ts') then
        if (icase=='vortex') then
@@ -192,6 +200,12 @@ contains
             nf+1,jmax-nf+1,1,kmax,nf+1,lmax-nf+1,jmax,kmax,lmax,nq,istor)
           call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
        endif
+       
+       if (dt > 1e5) then
+          h=CFL*min(dz,min(dx,dy))/(1d0+fsmach)
+       else
+          h=dt
+       endif
     else 
        t=(2*pi/freq)*(1.0*myid)/numprocs
        if (myid == 0) then
@@ -202,9 +216,8 @@ contains
           endif
        endif
        amp=0.01
-       freq=1
        call bc_per1(q,x,fsmach,gamma,amp,freq,t,jmax,kmax,lmax,bctyp,fluxOrder,dissOrder)       
-       h = dx*cfl/(1.0+fsmach)
+       h =cfl*min(dz,min(dx,dy))/(1d0+fsmach)
        if (myid==0) then
           write(6,*) "Timestep = ", h
        endif
@@ -214,13 +227,6 @@ contains
     !
     qn=q
     qnm1=q
-    !
-    if (dt > 1e5) then
-       h=CFL*min(dz,min(dx,dy))/(1d0+fsmach)
-       write(6,*) 'h=',h
-    else
-       h=dt
-    endif
     !
     tscale=h
     tscal=h
@@ -263,6 +269,7 @@ contains
     !
     call cpu_time(t_start)
     if (irhs.eq.0) then
+       
        call inviscidRHSunified(nq,nvar,gamma,q,rhs,spec,tm,dx,dy,dz,jmax,kmax,lmax,&
               fluxOrder,dissOrder,dissCoef,istor)
     elseif (irhs.eq.1) then
@@ -361,7 +368,6 @@ contains
     !
     real*8 :: t_start,t_end,tsum_ts,tsum
     !> Perform Implicit Solve (LU-SGS or ADI or DADI)
-    call compute_norm(norm,rhs,jmax,kmax,lmax,nq,istor)
     call cpu_time(t_start)
     if (ilhs.eq.0) then
        if (istor=='row') then
@@ -376,28 +382,38 @@ contains
        call ddadi(nq,nvar,gamma,q,rhs,spec,tscal,timeMetric,dx,dy,dz,jmax,kmax,lmax,&
             fluxOrder,dissOrder,dissCoef,istor)
     endif
-    !> Update Solution    
-    q=q+rhs/vol
-    if (myid==0) write(6,*) n,it,norm
+    call cpu_time(t_end)
+    !> Update Solution  
+    dq = rhs/vol
+    q=q+dq
+    if (timeIntegrator.eq.'ts') then
+       call compute_norm_two(norm,dq,jmax,kmax,lmax,ninstances)
+    else
+       call compute_norm(norm,rhs,jmax,kmax,lmax,nq,istor)
+    endif
+    if (myid==0) then
+        if (timeIntegrator.eq.'ts') then
+          write(6,*) numprocs,it,norm
+        else
+          write(6,*) n,it,norm
+        endif
+    endif
+    !
     tcomp_lhs    = tcomp_lhs    + t_end - t_start
     !
   end subroutine cart_lhs
-  !!                                                                                                 
+  !!
   !> compute norm on dq and rhs                                                                      
   !!                                                                                                 
   subroutine ts_compute_norm(rhs_res_two,dq_res_two,rhs_res_inf,dq_res_inf)
     !use tsglobalvar
     implicit none
     real*8, intent(inout) :: rhs_res_two,dq_res_two,rhs_res_inf,dq_res_inf
-    
-    !> Evaluate norm of dq (2 and Inf)                                                                                                                                                                
-    call compute_norm_two(dq_res_two,rhs,jmax,kmax,lmax,ninstances)
-    call compute_norm_inf(dq_res_inf,rhs,jmax,kmax,lmax,ninstances)
 
     !> Call Spatial Residual                                                                         
     if (irhs.eq.0) then
        call inviscidRHSunified(nq,nvar,gamma,q,rhs,spec,timeMetric,dx,dy,dz,jmax,kmax,lmax,&
-            fluxOrder,dissOrder,dissCoef,'row')
+            fluxOrder,dissOrder,dissCoef,istor)
     elseif (irhs.eq.1) then
        call inviscidRHSupwind(nq,nvar,gamma,q,rhs,spec,timeMetric,dx,dy,dz,jmax,kmax,lmax,&
             'muscl','row')
@@ -410,6 +426,11 @@ contains
     call compute_norm_two(rhs_res_two,rhs,jmax,kmax,lmax,ninstances)
     call compute_norm_inf(rhs_res_inf,rhs,jmax,kmax,lmax,ninstances)
     
+    !> Evaluate norm of dq (2 and Inf)                                                                                                                                                                                                    
+    call compute_norm_two(dq_res_two,dq,jmax,kmax,lmax,ninstances)
+    call compute_norm_inf(dq_res_inf,dq,jmax,kmax,lmax,ninstances)
+
+
   end subroutine ts_compute_norm
   !!
   !> output data in plot3d format
@@ -420,7 +441,7 @@ contains
     !
     ! write output plot3d files
     !
-    if (timeIntegrator=='ts') then
+   if (timeIntegrator=='ts') then
        call storep3d(x,q,myid*1000+n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
     else
        call storep3d(x,q,n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
@@ -434,7 +455,7 @@ contains
   subroutine cart_cleanup
     implicit none
     !
-    deallocate(q,rhs,x,spaceMetric,spec,tscale)
+    deallocate(q,dq,rhs,x,spaceMetric,spec,tscale)
     call mpi_finalize(ierr)
     !
   end subroutine cart_cleanup

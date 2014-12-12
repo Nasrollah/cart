@@ -59,9 +59,6 @@ class cartModule:
 	if bdf:
 	    self.cart.cart_bdf_source()
 
-    #def rhs(self):
-    #    self.cart.cart_rhs_inviscid()
-
     def lhs(self,it):
         self.cart.cart_lhs(it)
 
