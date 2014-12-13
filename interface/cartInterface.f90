@@ -181,7 +181,6 @@ contains
        enddo
     endif
     !
-    write(6,*) '#### jmax,kmax,lmax=',jmax,kmax,lmax,nq
     call storep3d(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
     !
     ! initialize data
@@ -388,15 +387,10 @@ contains
     q=q+dq
     if (timeIntegrator.eq.'ts') then
        call compute_norm_two(norm,dq,jmax,kmax,lmax,ninstances)
+       if (myid==0) write(6,*) numprocs,it,norm
     else
        call compute_norm(norm,rhs,jmax,kmax,lmax,nq,istor)
-    endif
-    if (myid==0) then
-        if (timeIntegrator.eq.'ts') then
-          write(6,*) numprocs,it,norm
-        else
-          write(6,*) n,it,norm
-        endif
+       if (myid==0) write(6,*) n,it,norm
     endif
     !
     tcomp_lhs    = tcomp_lhs    + t_end - t_start

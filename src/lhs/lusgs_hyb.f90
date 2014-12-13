@@ -153,7 +153,11 @@ do k=ks,ke
          rr3=dzi         
          !
          svt=tscale
-         vscale=(1d0+q(6,j,k,l))/(rey*q(1,j,k,l))
+         if (nq.gt.5) then
+            vscale=(1d0+q(6,j,k,l))/(rey*q(1,j,k,l))
+         else
+            vscale=1d0/(rey*q(1,j,k,l))
+         endif
          !
          ! diagonal contribution of the direct viscous terms
          ! no cross terms and off-diagonals for now
