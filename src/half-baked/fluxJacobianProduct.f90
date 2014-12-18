@@ -77,6 +77,8 @@ rvel=vel-tm(idir)
 u2=0.5d0*(q(2)*q(2)+q(3)*q(3)+q(4)*q(4))
 p=gm1*(q(5)-u2*irho)
 drvel=-q(ip)*irho2*dq(1)+dq(ip)*irho
+
+! store dp(j,k,l) and send it in like p. if sending in p get rid of u2
 dp=gm1*(dq(1)*u2*irho2&
      -dq(2)*q(2)*irho&
      -dq(3)*q(3)*irho&
