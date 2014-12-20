@@ -35,7 +35,7 @@ module cartInterface
   character*16 :: timeIntegrator,icase
   character*6 :: istor
   real*8  :: t_total,s_total,tcomp_solver,tcomp_rhs,tcomp_lhs,tcomp_ts,tcomm_ts
-  integer :: ninstances
+  integer :: ninstances,nsweep
   real,parameter :: pi=acos(-1.)
 contains
   subroutine cart_set_defaults
@@ -64,6 +64,7 @@ contains
     icase='taylor-green'
     ilhs=1
     irhs=0
+    nsweep=1
   end subroutine cart_set_defaults
     
   subroutine cart_param_input
@@ -380,6 +381,9 @@ contains
     elseif (ilhs.eq.2) then
        call ddadi(nq,nvar,gamma,q,rhs,spec,tscal,timeMetric,dx,dy,dz,jmax,kmax,lmax,&
             fluxOrder,dissOrder,dissCoef,istor)
+    elseif (ilhs.eq.3) then
+       call gslr(nq,nvar,gamma,q,rhs,spec,tscal,timeMetric,dx,dy,dz,jmax,kmax,lmax,&
+            fluxOrder,dissOrder,dissCoef,istor,nsweep,myid)
     endif
     call cpu_time(t_end)
     !> Update Solution  

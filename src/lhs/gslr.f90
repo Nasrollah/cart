@@ -18,7 +18,7 @@
 !!
 !====================================================================!
 subroutine gslr(nq,nvar,gamma,q,s,spec,tscale,timeMetric,dx,dy,dz,jmax,kmax,lmax,flux_order,&
-                      diss_order,efac,istor,nsweep)
+                      diss_order,efac,istor,nsweep,myid)
 !
 implicit none
 !
@@ -41,17 +41,18 @@ integer, intent(in)       :: diss_order                !< order of dissipation
 real*8,  intent(in)       :: efac                      !< scaling for dissipation
 character*(*), intent(in) :: istor                     !< storage type
 integer, intent(in)       :: nsweep                    !< number of gs sweeps in each direction
+integer, intent(in) :: myid
 !
 ! local variables
 !
 integer :: j,k,l,n,mdim,ii
-integer :: js,je,lenj,ks,ke,ls,le,nf,nd
+integer :: js,je,lenj,ks,ke,ki,ls,le,li,nf,nd
 real*8, allocatable :: pressure(:),dpressure(:),dtphys(:)
 real*8, allocatable :: sigma(:),dsigma(:)
 real*8, allocatable :: a(:,:,:),b(:,:,:),c(:,:,:),dfdq(:,:,:)
-real*8, allocatable :: dq_tmp(:,:),dq(:)
+real*8, allocatable :: dq_line(:,:),dq(:)
 real*8  :: sflux(nq,nq),dflux(nq,nq),dfdq_loc(nq,nq)
-real*8  :: qcons(nvar),ds(3)
+real*8  :: qcons(nvar),dqcons(nvar),ds(3)
 integer :: idir,jkmax,ip,ipp,jstride,iq,iloc,qmult,qskip,iminus,iplus,iqp
 real*8  :: faceArea,faceSpeed
 real*8  :: fcoef(3),dcoef(3)
@@ -66,21 +67,21 @@ integer :: isweep
 !
 real*8 :: gm1,ruu,vel,rvel,fdiv,eps,ediv
 !real*8 :: ts,te,tc,tfj,tabc,tbt
-real*8 :: acoeff,bcoeff,ccoeff,qtmp(nq),dqtmp(nq)
+real*8 :: acoeff,bcoeff,ccoeff
 !
 ! begin
 !
 gm1=gamma-1
 !
-vol = dx*dy*dz
+vol   = dx*dy*dz
 sflux = 0.0d0
 dflux = 0.0d0
 !
-mdim=max(lmax,max(jmax,kmax),dq(nq*jmax*kmax*lmax))
-allocate(sigma(mdim),dsigma(jmax*kmax*lmax))
+mdim=max(lmax,max(jmax,kmax))
+allocate(sigma(mdim),dsigma(jmax*kmax*lmax),dq(nq*jmax*kmax*lmax))
 allocate(pressure(jmax*kmax*lmax),dpressure(jmax*kmax*lmax),dtphys(mdim))
 allocate(a(nq,nq,mdim),b(nq,nq,mdim),c(nq,nq,mdim),dfdq(nq,nq,mdim))
-allocate(dq_tmp(nq,mdim))
+allocate(dq_line(nq,mdim))
 !
 ! use storage string to set the variable
 ! location order
@@ -229,6 +230,7 @@ enddo
 ! evaluate flux jacobians to populate the tridiagonal
 ! system in each coordinate direction
 !
+dq=0.0d0
 do idir=1,3
    if (idir == 2) then
       ipp=mod(idir,3)+1
@@ -257,26 +259,31 @@ do idir=1,3
    !
    ! Solve ADI system of equations
    !
-   dfdq = 0.0d0
-   dq_tmp   = 0.0d0
-   a    = 0.0d0
-   b    = 0.0d0
-   c    = 0.0d0
+   dfdq    = 0.0d0
+   dq_line = 0.0d0
+   a       = 0.0d0
+   b       = 0.0d0
+   c       = 0.0d0
 
    do isweep = 1,nsweep
+
       ! Forward Sweep
+      ki = 1
+      li = 1
       call gslr_sweep(nq,nvar,gm1,pressure,flux_order,diss_order,efac,idir,&
-           ip,ipp,dfdq,sigma,a,b,c,js,je,ks,ke,1,ls,le,1,dim1,dim2,q,&
-           dq,s,qtmp,dqtmp,dq_tmp,jmax,kmax,lmax,npts,ndof,mdim,&
+           ip,ipp,dfdq,sigma,a,b,c,js,je,ks,ke,ki,ls,le,li,dim0,dim1,dim2,q,&
+           dq,s,dq_line,jmax,kmax,lmax,mdim,&
            timeMetric,qskip,qmult,jstride,spec,faceSpeed,&
-           h0,h0eps,eps,sflux,dflux)
+           h0,h0eps,eps,sflux,dflux,dsigma,myid)
       
       ! Backward Sweep
+      ki = -1
+      li = -1
       call gslr_sweep(nq,nvar,gm1,pressure,flux_order,diss_order,efac,idir,&
-           ip,ipp,dfdq,sigma,a,b,c,js,je,ks,ke,-1,ls,le,-1,dim1,dim2,q,&
-           dq,s,qtmp,dqtmp,dq_tmp,jmax,kmax,lmax,npts,ndof,mdim,&
+           ip,ipp,dfdq,sigma,a,b,c,js,je,ke,ks,ki,le,ls,li,dim0,dim1,dim2,q,&
+           dq,s,dq_line,jmax,kmax,lmax,mdim,&
            timeMetric,qskip,qmult,jstride,spec,faceSpeed,&
-           h0,h0eps,eps,sflux,dflux)
+           h0,h0eps,eps,sflux,dflux,dsigma,myid)
    enddo
 enddo
 !
@@ -285,41 +292,44 @@ enddo
 s = vol*dq
 !
 deallocate(sigma,dsigma,pressure,dpressure,dtphys)
-deallocate(a,b,c,dfdq,dq,dq_tmp,rhs)
+deallocate(a,b,c,dfdq,dq,dq_line)
 !
 return
 end subroutine gslr
 
 !
 subroutine gslr_sweep(nq,nvar,gm1,pressure,flux_order,diss_order,efac,idir,&
-                      ip,ipp,dfdq,sigma,a,b,c,js,je,ks,ke,ki,ls,le,li,dim1,dim2,q,&
-                      dq,s,qtmp,dqtmp,dq_tmp,jmax,kmax,lmax,npts,ndof,mdim,&
+                      ip,ipp,dfdq,sigma,a,b,c,js,je,ks,ke,ki,ls,le,li,dim0,dim1,dim2,q,&
+                      dq,s,dq_line,jmax,kmax,lmax,mdim,&
                       timeMetric,qskip,qmult,jstride,spec,faceSpeed,&
-                      h0,h0eps,eps,sflux,dflux)
+                      h0,h0eps,eps,sflux,dflux,dsigma,myid)
 !
 implicit none
 !
-integer,                            intent(in) :: nq,nvar,mdim,qskip,qmult,jstride
-real*8,                             intent(in) :: gm1
-real*8,  dimension(jmax*kmax*lmax), intent(in) :: spec,pressure
-integer,                       intent(in)    :: flux_order,diss_order
-real*8,                        intent(in)    :: efac,faceSpeed
-integer,                       intent(in)    :: idir,ip,ipp
-real*8, dimension(mdim),       intent(inout) :: sigma
-real*8, dimension(nq,nq,mdim), intent(inout) :: dfdq,a,b,c
-integer,                       intent(in)    :: js,je,ks,ke,ki,ls,le,li
-integer,                       intent(in)    :: jmax,kmax,lmax
-integer,                       intent(in)    :: dim1,dim2,npts,ndof
-real*8, dimension(nq*jmax*kmax*lmax), intent(inout) :: q,dq,s
-real*8, dimension(nq,mdim),    intent(inout) :: dq_tmp
-real*8, dimension(nq),         intent(inout) :: qtmp,dqtmp
-real*8, dimension(3),          intent(in)    :: timeMetric
-real*8, intent(in) :: h0,h0eps,eps
-real*8, dimension(nq,nq), intent(inout) :: sflux,dflux
+integer,                              intent(in)    :: nq,nvar,mdim,qskip,qmult,jstride
+real*8,                               intent(in)    :: gm1
+real*8,  dimension(jmax*kmax*lmax),   intent(in)    :: spec,pressure
+integer,                              intent(in)    :: flux_order,diss_order
+real*8,                               intent(in)    :: efac,faceSpeed
+integer,                              intent(in)    :: idir,ip,ipp
+real*8, dimension(mdim),              intent(inout) :: sigma
+real*8, dimension(nq,nq,mdim),        intent(inout) :: dfdq,a,b,c
+integer,                              intent(in)    :: js,je,ks,ke,ki,ls,le,li
+integer,                              intent(in)    :: jmax,kmax,lmax
+integer,                              intent(in)    :: dim1,dim2
+real*8, dimension(nq*jmax*kmax*lmax), intent(inout) :: dq
+real*8, dimension(nq*jmax*kmax*lmax), intent(in)    :: q,s
+real*8, dimension(nq,mdim),           intent(inout) :: dq_line
+real*8, dimension(3),                 intent(in)    :: timeMetric
+integer, dimension(3),                intent(in)    :: dim0
+real*8,                               intent(in)    :: h0,h0eps,eps
+real*8, dimension(nq,nq),             intent(inout) :: sflux,dflux
+real*8, dimension(jmax*kmax*lmax),    intent(in)    :: dsigma
+integer,                              intent(in)    :: myid
 !
-integer :: j,k,l,ii
+integer :: j,k,l,ii,n,ik,il
 integer :: iq,iloc,iqp,lenj
-real*8  :: qcons(nq),vel,rvel,
+real*8  :: qcons(nvar),dqcons(nvar),vel,rvel
 real*8  :: acoeff,bcoeff,ccoeff
 real*8  :: sigm,sig,sigp
 real*8  :: bdq_p(nq),bdq_m(nq),cdq_p(nq),cdq_m(nq)
@@ -369,7 +379,7 @@ do l=ls,le,li
          do ii = 1,nq
             dflux(ii,ii) = acoeff
          enddo
-         a(:,:,j) =  sflux-dflux
+         a(1:nq,1:nq,j) =  sflux-dflux
          
          ! B
          sflux = 0.0d0
@@ -384,115 +394,43 @@ do l=ls,le,li
             dflux(ii,ii) = ccoeff
          enddo
          c(1:nq,1:nq,j) =  sflux-dflux
-         
+         !
          iq = iq + jstride
-         
       enddo
       
       !>                                                                                              
-      !> Evaluate the matrix-vector products (not just fj, but total A*dq)                            
+      !> Evaluate the matrix-vector products Adq in k- and l-coordinate directions
       !>    
       do j=js,je
-         iq=(l-1)*dim2+(k-1)*dim1+(j-1)*jstride
-         iqp = iq + 1
-         iloc=iq*qmult+1           
-         !
-         ! k-drection: dir = ip
-         !            
-         vel    = q(iloc+ip*qskip)/q(iloc)
-         sig    = spec(iqp) + abs(vel) 
-         
-         ! k-1: bdq_m                                                                       
-         iq     = (l-1)*dim2+(k-2)*dim1+(j-1)*jstride
-         iqp    = iq + 1
-         iloc   = iq*qmult+1
-         vel    = q(iloc+ip*qskip)/q(iloc)
-         sigm   = spec(iqp)+abs(vel)
-         acoeff = eps*(sigm+sig)
-         do n = 1,nvar
-            qtmp(n)   = q(iloc)
-            dqtmp(n)  = dq(iloc) 
-            iloc = iloc + qskip
-         enddo
-         !
-         call fjdq(nq,ip,gm1,qtmp,dqtmp,timeMetric,acoeff,bdq_m)
-         !
-         bdq_m = -h0*bdq_m 
-         
-         ! k+1: bdq_p                                                                       
-         iq=(l-1)*dim2+(k)*dim1+(j-1)*jstride
-         iqp   = iq + 1
-         iloc   = iq*qmult+1
-         vel    = q(iloc+ip*qskip)/q(iloc)
-         sigp   = spec(iqp) + abs(vel) 
-         ccoeff = -eps*(sig+sigp)
-         do n = 1,nvar
-            qtmp(n)   = q(iloc)
-            dqtmp(n)  = dq(iloc)
-            iloc = iloc + qskip
-         enddo
-         !
-         call fjdq(nq,ip,gm1,qtmp,dqtmp,timeMetric,ccoeff,bdq_p)
-         !
-         bdq_p  = h0*bdq_p
-         
-         iq=(l-1)*dim2+(k-1)*dim1+(j-1)*jstride
-         iqp = iq + 1
-         iloc=iq*qmult+1
-         !
-         ! l-direction: dir = ipp
-         !
-         vel    = q(iloc+ipp*qskip)/q(iloc)
-         sig    = spec(iqp) + abs(vel)
-         
-         
-         ! l-1: cdq_m                                                                       
-         iq     = (l-2)*dim2+(k-1)*dim1+(js-1)*jstride
-         iqp    = iq + 1
-         iloc   = iq*qmult+1
-         vel    = q(iloc+ipp*qskip)/q(iloc)
-         sigm   = spec(iqp)+abs(vel)
-         acoeff = eps*(sigm+sig)
-         do n = 1,nvar
-            qtmp(n)   = q(iloc)
-            dqtmp(n)  = dq(iloc)
-            iloc = iloc + qskip
-         enddo
-         !                                                                                                                                                    
-         call fjdq(nq,ipp,gm1,qtmp,dqtmp,timeMetric,acoeff,bdq_m)
-         !                                                                                                                                            
-         cdq_m = -h0*cdq_m
-         ! l+1: cdq_p        
-         iq     = (l)*dim2+(k-1)*dim1+(js-1)*jstride
-         iqp    = iq + 1
-         iloc   = iq*qmult+1
-         vel    = q(iloc+ipp*qskip)/q(iloc)
-         sigp   = spec(iqp) + abs(vel)
-         ccoeff = -eps*(sig+sigp)
-         do n = 1,nvar
-            qtmp(n)   = q(iloc)
-            dqtmp(n)  = dq(iloc)
-            iloc = iloc + qskip
-         enddo
-         !                                                                                                                             
-         call fjdq(nq,ipp,gm1,qtmp,dqtmp,timeMetric,ccoeff,bdq_p)
-         !                                                                                                       
-         cdq_p  = h0*cdq_p
+         !>
+         ! k-direction
+         !>
+         ik = 1
+         il = 0
+         call rhs_gs(bdq_p,bdq_m,nq,nvar,j,k,l,ip, h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
          
          !>
-         ! Modify RHS
+         ! l-direction
          !>
+         ik = 0
+         il = 1
+         call rhs_gs(cdq_p,cdq_m,nq,nvar,j,k,l,ipp,h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
+        
+         !>
+         ! Update RHS
+         !>
+         call get_iloc(j,k,l,qmult,dim1,dim2,jstride,iloc,iqp)
+         !
          do n=1,nvar
-            dq_tmp(n,j)=s(iloc) - bdq_m - bdq_p - cdq_m - cdq_p
+            dq_line(n,j)=s(iloc) - (bdq_m(n) + bdq_p(n) + cdq_m(n) + cdq_p(n))
             iloc=iloc+qskip
          enddo
-         iq=iq+jstride
       enddo
       
       ! Solve block Tridiagonal System
       lenj = je - js + 1
       
-      call blockThomas(a(:,:,js:je),b(:,:,js:je),c(:,:,js:je),dq_tmp(:,js:je),nq,lenj)
+      call blockThomas(a(:,:,js:je),b(:,:,js:je),c(:,:,js:je),dq_line(:,js:je),nq,lenj)
       
       ! Extract updated RHS
       iq=(l-1)*dim2+(k-1)*dim1+(js-1)*jstride
@@ -500,7 +438,7 @@ do l=ls,le,li
       do j=js,je
          iloc=iq*qmult+1
          do n=1,nvar
-            dq(iloc)=dq_tmp(n,j)
+            dq(iloc)=dq_line(n,j)
             iloc=iloc+qskip
          enddo
          iq=iq+jstride
@@ -510,3 +448,53 @@ enddo
 !
 return
 end subroutine gslr_sweep
+
+subroutine rhs_gs(adq_p,adq_m,nq,nvar,j,k,l,idir,h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
+!
+implicit none
+!
+real*8, dimension(nq),                intent(inout) :: adq_p,adq_m
+integer,                              intent(in)    :: nq,nvar,j,k,l,idir,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride
+real*8,                               intent(in)    :: h0,eps,gm1
+real*8, dimension(3),                 intent(in)    :: timeMetric
+real*8, dimension(nq*jmax*kmax*lmax), intent(in)    :: q,dq
+real*8, dimension(jmax*kmax*lmax),    intent(in)    :: spec
+integer,                              intent(in)    :: ik,il
+!
+integer :: iqp
+real*8  :: vel,sigm,sig,sigp,mcoeff,pcoeff
+real*8  :: qcons(nq),dqcons(nq)
+!>
+! (j,k,l)
+!>
+call get_qcons(q,qcons,nq,nvar,jmax,kmax,lmax,j,k,l,qmult,qskip,dim1,dim2,jstride,iqp)
+vel    = qcons(idir+1)/qcons(1)
+sig    = spec(iqp) + abs(vel)
+!>
+! (j,k-ik,l-il) 
+!>
+call get_qcons(q,  qcons,nq,nvar,jmax,kmax,lmax,j,k-ik,l-il,qmult,qskip,dim1,dim2,jstride,iqp)
+call get_qcons(dq,dqcons,nq,nvar,jmax,kmax,lmax,j,k-ik,l-il,qmult,qskip,dim1,dim2,jstride,iqp)
+vel    = qcons(idir+1)/qcons(1)
+sigm   = spec(iqp)+abs(vel)
+mcoeff = eps*(sigm+sig)
+!                                                                                                                                                                                      
+call fjdq(nq,idir,gm1,qcons,dqcons,timeMetric,mcoeff,adq_m)
+!                                                                                                                                                                                                    
+adq_m = -h0*adq_m
+
+!>
+! (j,k+ik,l+il)
+!>
+call get_qcons(q,  qcons,nq,nvar,jmax,kmax,lmax,j,k+ik,l+il,qmult,qskip,dim1,dim2,jstride,iqp)
+call get_qcons(dq,dqcons,nq,nvar,jmax,kmax,lmax,j,k+ik,l+il,qmult,qskip,dim1,dim2,jstride,iqp)
+vel    = qcons(idir+1)/qcons(1)
+sigp   = spec(iqp) + abs(vel)
+pcoeff = -eps*(sig+sigp)
+!                                                                                                                                                                                                    
+call fjdq(nq,idir,gm1,qcons,dqcons,timeMetric,pcoeff,adq_p)
+!                                                                                                                                                                                                    
+adq_p  = h0*adq_p
+!
+return
+end subroutine rhs_gs
