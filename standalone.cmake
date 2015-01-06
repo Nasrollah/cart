@@ -72,7 +72,7 @@ ELSEIF(MACHINE STREQUAL "linux")
 
        set(PYVERSION 2.7.5)
        set(PTOOLSRTE /share/apps/hiarms/ptoolsrte-0.5.1rc4)
-       set (PYTHON_INCLUDE ${PTOOLSRTE}/packages/Python-${PYVERSION}/include/python2.7)
+       set (PYTHON_INCLUDE ${PYTHON_INCLUDE_DIRS})
 ELSE()
        message( FATAL_ERROR "Unsupported machine, exiting.")
 ENDIF()
