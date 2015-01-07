@@ -9,5 +9,6 @@ src/lhs/lusgs_hyb.f90
 src/lhs/fluxJacobianMatVec.f90
 src/lhs/unrolled_blockThomas.f90
 src/lhs/gslr.f90
+src/lhs/gslr_storage.f90
 src/lhs/fjdq.f90
 src/lhs/utils.f90)

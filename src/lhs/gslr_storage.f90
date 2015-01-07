@@ -17,8 +17,8 @@
 !!   \include gslr_naive.f90
 !!
 !====================================================================!
-subroutine gslr(nq,nvar,gamma,q,s,spec,tscale,timeMetric,dx,dy,dz,jmax,kmax,lmax,flux_order,&
-                      diss_order,efac,istor,nsweep,myid)
+subroutine gslr_storage(nq,nvar,gamma,q,s,spec,tscale,timeMetric,dx,dy,dz,jmax,kmax,lmax,flux_order,&
+                        diss_order,efac,istor,nsweep,myid)
 !
 implicit none
 !
@@ -50,7 +50,7 @@ integer :: js,je,lenj,ks,ke,ki,ls,le,li,nf,nd
 real*8, allocatable :: pressure(:),dpressure(:),dtphys(:)
 real*8, allocatable :: sigma(:),dsigma(:)
 real*8, allocatable :: a(:,:,:),b(:,:,:),c(:,:,:),dfdq(:,:,:)
-real*8, allocatable :: dq_line(:,:),dq(:)
+real*8, allocatable :: dq_line(:,:),dq(:),sm(:),sp(:)
 real*8  :: sflux(nq,nq),dflux(nq,nq),dfdq_loc(nq,nq)
 real*8  :: qcons(nvar),dqcons(nvar),ds(3)
 integer :: idir,jkmax,ip,ipp,jstride,iq,iloc,qmult,qskip,iminus,iplus,iqp
@@ -63,7 +63,7 @@ real*8  :: vol
 real*8  :: h0,h0eps,i2ds,dt,dt_ivol
 real*8  :: dsig
 real*8  :: irho,irho2,u2
-integer :: isweep
+integer :: isweep,gsdir
 !
 real*8 :: gm1,ruu,vel,rvel,fdiv,eps,ediv
 !real*8 :: ts,te,tc,tfj,tabc,tbt
@@ -81,7 +81,7 @@ mdim=max(lmax,max(jmax,kmax))
 allocate(sigma(mdim),dsigma(jmax*kmax*lmax),dq(nq*jmax*kmax*lmax))
 allocate(pressure(jmax*kmax*lmax),dpressure(jmax*kmax*lmax),dtphys(mdim))
 allocate(a(nq,nq,mdim),b(nq,nq,mdim),c(nq,nq,mdim),dfdq(nq,nq,mdim))
-allocate(dq_line(nq,mdim))
+allocate(dq_line(nq,mdim),sm(nq*jmax*kmax*lmax),sp(nq*jmax*kmax*lmax))
 !
 ! use storage string to set the variable
 ! location order
@@ -230,7 +230,10 @@ enddo
 ! evaluate flux jacobians to populate the tridiagonal
 ! system in each coordinate direction
 !
-dq=0.0d0
+dq = 0.0d0
+sm = 0.0d0
+sp = 0.0d0
+!
 do idir=1,3
    if (idir == 2) then
       ipp=mod(idir,3)+1
@@ -268,22 +271,24 @@ do idir=1,3
    do isweep = 1,nsweep
 
       ! Forward Sweep
-      ki = 1
-      li = 1
-      call gslr_sweep(nq,nvar,gm1,pressure,flux_order,diss_order,efac,idir,&
+      gsdir =  1
+      ki    = gsdir
+      li    = gsdir
+      call gslr_dir(nq,nvar,gm1,pressure,flux_order,diss_order,efac,idir,&
            ip,ipp,dfdq,sigma,a,b,c,js,je,ks,ke,ki,ls,le,li,dim0,dim1,dim2,q,&
            dq,s,dq_line,jmax,kmax,lmax,mdim,&
            timeMetric,qskip,qmult,jstride,spec,faceSpeed,&
-           h0,h0eps,eps,sflux,dflux,dsigma,myid)
+           h0,h0eps,eps,sflux,dflux,dsigma,myid,sm,gsdir)
       
       ! Backward Sweep
-      ki = -1
-      li = -1
-      call gslr_sweep(nq,nvar,gm1,pressure,flux_order,diss_order,efac,idir,&
+      gsdir = -1
+      ki    = gsdir
+      li    = gsdir
+      call gslr_dir(nq,nvar,gm1,pressure,flux_order,diss_order,efac,idir,&
            ip,ipp,dfdq,sigma,a,b,c,js,je,ke,ks,ki,le,ls,li,dim0,dim1,dim2,q,&
            dq,s,dq_line,jmax,kmax,lmax,mdim,&
            timeMetric,qskip,qmult,jstride,spec,faceSpeed,&
-           h0,h0eps,eps,sflux,dflux,dsigma,myid)
+           h0,h0eps,eps,sflux,dflux,dsigma,myid,sp,gsdir)
    enddo
 enddo
 !
@@ -293,20 +298,21 @@ s = vol*dq
 !
 deallocate(sigma,dsigma,pressure,dpressure,dtphys)
 deallocate(a,b,c,dfdq,dq,dq_line)
+deallocate(sm,sp)
 !
 return
-end subroutine gslr
+end subroutine gslr_storage
 
 !
-subroutine gslr_sweep(nq,nvar,gm1,pressure,flux_order,diss_order,efac,idir,&
-                      ip,ipp,dfdq,sigma,a,b,c,js,je,ks,ke,ki,ls,le,li,dim0,dim1,dim2,q,&
-                      dq,s,dq_line,jmax,kmax,lmax,mdim,&
-                      timeMetric,qskip,qmult,jstride,spec,faceSpeed,&
-                      h0,h0eps,eps,sflux,dflux,dsigma,myid)
+subroutine gslr_dir(nq,nvar,gm1,pressure,flux_order,diss_order,efac,idir,&
+     ip,ipp,dfdq,sigma,a,b,c,js,je,ks,ke,ki,ls,le,li,dim0,dim1,dim2,q,&
+     dq,s,dq_line,jmax,kmax,lmax,mdim,&
+     timeMetric,qskip,qmult,jstride,spec,faceSpeed,&
+     h0,h0eps,eps,sflux,dflux,dsigma,myid,sdir,gsdir)
 !
 implicit none
 !
-integer,                              intent(in)    :: nq,nvar,mdim,qskip,qmult,jstride
+integer,                              intent(in)    :: nq,nvar,mdim,qskip,qmult,jstride,gsdir
 real*8,                               intent(in)    :: gm1
 real*8,  dimension(jmax*kmax*lmax),   intent(in)    :: spec,pressure
 integer,                              intent(in)    :: flux_order,diss_order
@@ -317,8 +323,8 @@ real*8, dimension(nq,nq,mdim),        intent(inout) :: dfdq,a,b,c
 integer,                              intent(in)    :: js,je,ks,ke,ki,ls,le,li
 integer,                              intent(in)    :: jmax,kmax,lmax
 integer,                              intent(in)    :: dim1,dim2
-real*8, dimension(nq*jmax*kmax*lmax), intent(inout) :: dq
-real*8, dimension(nq*jmax*kmax*lmax), intent(in)    :: q,s
+real*8, dimension(nq*jmax*kmax*lmax), intent(in)    :: q
+real*8, dimension(nq*jmax*kmax*lmax), intent(inout) :: dq,s,sdir
 real*8, dimension(nq,mdim),           intent(inout) :: dq_line
 real*8, dimension(3),                 intent(in)    :: timeMetric
 integer, dimension(3),                intent(in)    :: dim0
@@ -332,7 +338,7 @@ integer :: iq,iloc,iqp,lenj
 real*8  :: qcons(nvar),dqcons(nvar),vel,rvel
 real*8  :: acoeff,bcoeff,ccoeff
 real*8  :: sigm,sig,sigp
-real*8  :: bdq_p(nvar),bdq_m(nvar),cdq_p(nvar),cdq_m(nvar),rhs(nvar)
+real*8  :: rhs(nvar),bdq(nvar),cdq(nvar)
 !
 do l=ls,le,li
    do k=ks,ke,ki
@@ -347,29 +353,29 @@ do l=ls,le,li
       ! Populate A,B & C matrices in j-line
       !>
       call store_abc(nq,jmax,kmax,lmax,js,je,k,l,dfdq,mdim,a,b,c,h0,h0eps,sigma,dsigma,sflux,dflux,dim1,dim2,jstride)
-      
-      !>                                                                                              
+
+      !>
       !> Evaluate the matrix-vector products Adq in k- and l-coordinate directions
-      !>    
+      !>
       do j=js,je
-         
-         ! k-direction
+
+         ! k-direction                                                                                                                                                                                     
          ik = 1
          il = 0
-         call rhs_gs(bdq_p,bdq_m,nq,nvar,j,k,l,ip, h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
+         call rhs_gs_dir(bdq,nq,nvar,j,k,l,ip, h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il,gsdir)
          
-         ! l-direction
+         ! l-direction                                                                                                                                                                                      
          ik = 0
          il = 1
-         call rhs_gs(cdq_p,cdq_m,nq,nvar,j,k,l,ipp,h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
-        
-         ! Update RHS
-         rhs = bdq_m + bdq_p + cdq_m + cdq_p
-         !
+         call rhs_gs_dir(cdq,nq,nvar,j,k,l,ipp,h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il,gsdir)
+         !                                                                                                                                                                                                  
          call get_iloc(j,k,l,qmult,dim1,dim2,jstride,iloc,iqp)
-         !
+         !                                                                                                                                                                                                  
          do n=1,nvar
-            dq_line(n,j)=s(iloc) - rhs(n)
+            rhs(n)       = bdq(n)  + cdq(n)
+            s(iloc)      = s(iloc) + sdir(iloc) - rhs(n)
+            dq_line(n,j) = s(iloc)
+            sdir(iloc)   = rhs(n)
             iloc=iloc+qskip
          enddo
       enddo
@@ -394,14 +400,15 @@ do l=ls,le,li
 enddo
 !
 return
-end subroutine gslr_sweep
+end subroutine gslr_dir
 
-subroutine rhs_gs(adq_p,adq_m,nq,nvar,j,k,l,idir,h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
+subroutine rhs_gs_dir(adq,nq,nvar,j,k,l,idir,h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il,gsdir)
 !
 implicit none
 !
-real*8, dimension(nq),                intent(inout) :: adq_p,adq_m
-integer,                              intent(in)    :: nq,nvar,j,k,l,idir,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride
+real*8, dimension(nq),                intent(inout) :: adq
+integer,                              intent(in)    :: nq,nvar,j,k,l,idir,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gsdir
+
 real*8,                               intent(in)    :: h0,eps,gm1
 real*8, dimension(3),                 intent(in)    :: timeMetric
 real*8, dimension(nq*jmax*kmax*lmax), intent(in)    :: q,dq
@@ -417,86 +424,33 @@ real*8  :: qcons(nq),dqcons(nq)
 call get_qcons(q,qcons,nq,nvar,jmax,kmax,lmax,j,k,l,qmult,qskip,dim1,dim2,jstride,iqp)
 vel    = qcons(idir+1)/qcons(1)
 sig    = spec(iqp) + abs(vel)
-!>
-! (j,k-ik,l-il) 
-!>
-call get_qcons(q,  qcons,nq,nvar,jmax,kmax,lmax,j,k-ik,l-il,qmult,qskip,dim1,dim2,jstride,iqp)
-call get_qcons(dq,dqcons,nq,nvar,jmax,kmax,lmax,j,k-ik,l-il,qmult,qskip,dim1,dim2,jstride,iqp)
-vel    = qcons(idir+1)/qcons(1)
-sigm   = spec(iqp)+abs(vel)
-mcoeff = eps*(sigm+sig)
-!                                                                                                                                                                                      
-call fjdq(nq,idir,gm1,qcons,dqcons,timeMetric,mcoeff,adq_m)
-!                                                                                                                                                                                                    
-adq_m = -h0*adq_m
-
-!>
-! (j,k+ik,l+il)
-!>
-call get_qcons(q,  qcons,nq,nvar,jmax,kmax,lmax,j,k+ik,l+il,qmult,qskip,dim1,dim2,jstride,iqp)
-call get_qcons(dq,dqcons,nq,nvar,jmax,kmax,lmax,j,k+ik,l+il,qmult,qskip,dim1,dim2,jstride,iqp)
-vel    = qcons(idir+1)/qcons(1)
-sigp   = spec(iqp) + abs(vel)
-pcoeff = -eps*(sig+sigp)
-!                                                                                                                                                                                                    
-call fjdq(nq,idir,gm1,qcons,dqcons,timeMetric,pcoeff,adq_p)
-!                                                                                                                                                                                                    
-adq_p  = h0*adq_p
-!
+if (gsdir.eq.1) then
+   !>
+   ! (j,k-ik,l-il) 
+   !>
+   call get_qcons(q,  qcons,nq,nvar,jmax,kmax,lmax,j,k-ik,l-il,qmult,qskip,dim1,dim2,jstride,iqp)
+   call get_qcons(dq,dqcons,nq,nvar,jmax,kmax,lmax,j,k-ik,l-il,qmult,qskip,dim1,dim2,jstride,iqp)
+   vel    = qcons(idir+1)/qcons(1)
+   sigm   = spec(iqp)+abs(vel)
+   mcoeff = eps*(sigm+sig)
+   !                                                                                                                     
+   call fjdq(nq,idir,gm1,qcons,dqcons,timeMetric,mcoeff,adq)
+   !                                                                                                                                                                                   
+   adq = -h0*adq
+   !
+else
+   !>                                                                                                                                                                                                      
+   ! (j,k+ik,l+il)                                                                                                                                                                                         
+   !>                                                                                                                                                                                                      
+   call get_qcons(q,  qcons,nq,nvar,jmax,kmax,lmax,j,k+ik,l+il,qmult,qskip,dim1,dim2,jstride,iqp)
+   call get_qcons(dq,dqcons,nq,nvar,jmax,kmax,lmax,j,k+ik,l+il,qmult,qskip,dim1,dim2,jstride,iqp)
+   vel    = qcons(idir+1)/qcons(1)
+   sigp   = spec(iqp) + abs(vel)
+   pcoeff = -eps*(sig+sigp)
+   !                                                                                                                                                                                                       
+   call fjdq(nq,idir,gm1,qcons,dqcons,timeMetric,pcoeff,adq)
+   !                                                                                                                                                                                                      
+   adq  = h0*adq
+endif
 return
-end subroutine rhs_gs
-
-subroutine store_abc(nq,jmax,kmax,lmax,js,je,k,l,dfdq,mdim,a,b,c,h0,h0eps,sigma,dsigma,sflux,dflux,dim1,dim2,jstride)
-!
-implicit none
-!
-integer, intent(in) :: nq,jmax,kmax,lmax,mdim,js,je,k,l,dim1,dim2,jstride
-real*8, dimension(nq,nq,mdim), intent(inout) :: dfdq,a,b,c
-real*8, dimension(mdim), intent(in) :: sigma
-real*8, dimension(jmax*kmax*lmax), intent(in) :: dsigma
-real*8, dimension(nq,nq), intent(inout) :: dflux,sflux
-real*8, intent(in) :: h0,h0eps
-!
-integer :: i,j,iq,iqp
-real*8 :: acoeff,bcoeff,ccoeff
-real*8 :: sigm,sig,sigp
-!
-iq=(l-1)*dim2+(k-1)*dim1+(js-1)*jstride
-!
-do j=js,je
-   iqp = iq + 1
-   
-   sigp           = sigma(j+1)
-   sig            = sigma(j)
-   sigm           = sigma(j-1)
-   
-   acoeff =  h0eps*(sigm + sig)
-   bcoeff =  dsigma(iqp)
-   ccoeff =  h0eps*(sig + sigp)
-   
-   ! A                                                                                                                                                                                          
-   sflux = -h0*dfdq(:,:,j-1)
-   do i = 1,nq
-      dflux(i,i) = acoeff
-   enddo
-   a(1:nq,1:nq,j) =  sflux-dflux
-   
-   ! B                                                                                                                                                                                          
-   sflux = 0.0d0
-   do i = 1,nq
-      sflux(i,i) = bcoeff
-   enddo
-   b(1:nq,1:nq,j) = sflux
-  
-   ! C                                                                                                                                                                                          
-   sflux = h0*dfdq(1:nq,1:nq,j+1)
-   do i = 1,nq
-      dflux(i,i) = ccoeff
-   enddo
-   c(1:nq,1:nq,j) =  sflux-dflux
-   !                                                                                                                                                                                            
-   iq = iq + jstride
-enddo
-!
-return
-end subroutine store_abc
+end subroutine rhs_gs_dir

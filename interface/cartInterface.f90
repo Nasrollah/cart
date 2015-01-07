@@ -384,6 +384,9 @@ contains
     elseif (ilhs.eq.3) then
        call gslr(nq,nvar,gamma,q,rhs,spec,tscal,timeMetric,dx,dy,dz,jmax,kmax,lmax,&
             fluxOrder,dissOrder,dissCoef,istor,nsweep,myid)
+    elseif (ilhs.eq.4) then
+       call gslr_storage(nq,nvar,gamma,q,rhs,spec,tscal,timeMetric,dx,dy,dz,jmax,kmax,lmax,&
+            fluxOrder,dissOrder,dissCoef,istor,nsweep,myid)
     endif
     call cpu_time(t_end)
     !> Update Solution  
