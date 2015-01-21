@@ -6,7 +6,6 @@
 !! This is a naive implemntation with no storage. A more sophisticated 
 !! approach will follow.
 !!
-!!
 !! Versions:\par
 !!    - Leffell 12/16/2014
 !!
@@ -14,7 +13,7 @@
 !!    blockThomas.f90
 !!
 !! Source code:\par
-!!   \include gslr_naive.f90
+!!   \include gslr.f90
 !!
 !====================================================================!
 subroutine gslr(nq,nvar,gamma,q,s,spec,tscale,timeMetric,dx,dy,dz,jmax,kmax,lmax,flux_order,&
