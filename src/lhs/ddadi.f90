@@ -59,7 +59,6 @@ real*8  :: dsig
 
 !
 real*8 :: gm1,ruu,vel,rvel,fdiv,eps,ediv
-!real*8 :: ts,te,tc,tfj,tabc,tbt
 real*8 :: acoeff,bcoeff,ccoeff
 !
 ! begin

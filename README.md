@@ -2,6 +2,16 @@ cart
 ====
 
 High-Order Cartesian Flow Solver
+----
+The following options for ilhs (Implicit Solver) are	implemented:
+   0) LU-SGS
+   1) ADI     
+   2) DD-DDI  
+   3) Gauss-Seidel Line	Relaxation
+   4) Same as 3	   but a more streamlined implementation
+
+   Upcoming:
+   5) Point Gauss-Seidel with special boundary treatment for concurrent	data transfer
 
 Testing and demos:
 -----------------

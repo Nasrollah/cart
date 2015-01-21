@@ -57,7 +57,6 @@ real*8  :: vol
 real*8  :: h0,h0eps,i2ds,dt,dt_ivol
 !
 real*8 :: gm1,ruu,vel,rvel,fdiv,eps,ediv
-!real*8 :: ts,te,tc,tfj,tabc,tbt
 real*8 :: acoeff,bcoeff,ccoeff
 !
 ! begin
@@ -160,11 +159,6 @@ kdim=(/jmax,1,1/)
 !
 ! evaluate flux jacobians to populate the tridiagonal
 ! system in each coordinate direction
-!
-
-!tfj  = 0.0d0
-!tabc = tfj
-!tbt  = tfj
 !
 do idir=1,3
    if (idir == 2) then
@@ -279,12 +273,7 @@ do idir=1,3
        
          ! Solve block Tridiagonal System
          lenj = je - js + 1
-
-         !call cpu_time(ts)
          call blockThomas(a(:,:,js:je),b(:,:,js:je),c(:,:,js:je),dq(:,js:je),nq,lenj)
-         !call cpu_time(te)
-        
-         !tbt = tbt + te - ts
 
          ! Extract updated RHS
          iq=(l-1)*dim2+(k-1)*dim1+(js-1)*jstride

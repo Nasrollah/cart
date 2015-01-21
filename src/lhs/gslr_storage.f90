@@ -41,12 +41,12 @@ integer, intent(in)       :: diss_order                !< order of dissipation
 real*8,  intent(in)       :: efac                      !< scaling for dissipation
 character*(*), intent(in) :: istor                     !< storage type
 integer, intent(in)       :: nsweep                    !< number of gs sweeps in each direction
-integer, intent(in) :: myid
+integer, intent(in)       :: myid
 !
 ! local variables
 !
 integer :: j,k,l,n,mdim,ii
-integer :: js,je,lenj,ks,ke,ki,ls,le,li,nf,nd
+integer :: js,je,lenj,ks,ke,ls,le,nf,nd
 real*8, allocatable :: pressure(:),dpressure(:),dtphys(:)
 real*8, allocatable :: sigma(:),dsigma(:)
 real*8, allocatable :: a(:,:,:),b(:,:,:),c(:,:,:),dfdq(:,:,:)
@@ -66,10 +66,7 @@ real*8  :: irho,irho2,u2
 integer :: isweep,gsdir
 !
 real*8 :: gm1,ruu,vel,rvel,fdiv,eps,ediv
-!real*8 :: ts,te,tc,tfj,tabc,tbt
 real*8 :: acoeff,bcoeff,ccoeff
-!
-! begin
 !
 gm1=gamma-1
 !
@@ -233,6 +230,9 @@ enddo
 dq = 0.0d0
 sm = 0.0d0
 sp = 0.0d0
+a = 0.0d0
+b = 0.0d0
+c = 0.0d0
 !
 do idir=1,3
    if (idir == 2) then
@@ -264,28 +264,20 @@ do idir=1,3
    !
    dfdq    = 0.0d0
    dq_line = 0.0d0
-   a       = 0.0d0
-   b       = 0.0d0
-   c       = 0.0d0
 
    do isweep = 1,nsweep
-
       ! Forward Sweep
       gsdir =  1
-      ki    = gsdir
-      li    = gsdir
       call gslr_dir(nq,nvar,gm1,pressure,flux_order,diss_order,efac,idir,&
-           ip,ipp,dfdq,sigma,a,b,c,js,je,ks,ke,ki,ls,le,li,dim0,dim1,dim2,q,&
+           ip,ipp,dfdq,sigma,a,b,c,js,je,ks,ke,ls,le,dim0,dim1,dim2,q,&
            dq,s,dq_line,jmax,kmax,lmax,mdim,&
            timeMetric,qskip,qmult,jstride,spec,faceSpeed,&
            h0,h0eps,eps,sflux,dflux,dsigma,myid,sm,gsdir)
       
       ! Backward Sweep
       gsdir = -1
-      ki    = gsdir
-      li    = gsdir
       call gslr_dir(nq,nvar,gm1,pressure,flux_order,diss_order,efac,idir,&
-           ip,ipp,dfdq,sigma,a,b,c,js,je,ke,ks,ki,le,ls,li,dim0,dim1,dim2,q,&
+           ip,ipp,dfdq,sigma,a,b,c,js,je,ke,ks,le,ls,dim0,dim1,dim2,q,&
            dq,s,dq_line,jmax,kmax,lmax,mdim,&
            timeMetric,qskip,qmult,jstride,spec,faceSpeed,&
            h0,h0eps,eps,sflux,dflux,dsigma,myid,sp,gsdir)
@@ -305,7 +297,7 @@ end subroutine gslr_storage
 
 !
 subroutine gslr_dir(nq,nvar,gm1,pressure,flux_order,diss_order,efac,idir,&
-     ip,ipp,dfdq,sigma,a,b,c,js,je,ks,ke,ki,ls,le,li,dim0,dim1,dim2,q,&
+     ip,ipp,dfdq,sigma,a,b,c,js,je,ks,ke,ls,le,dim0,dim1,dim2,q,&
      dq,s,dq_line,jmax,kmax,lmax,mdim,&
      timeMetric,qskip,qmult,jstride,spec,faceSpeed,&
      h0,h0eps,eps,sflux,dflux,dsigma,myid,sdir,gsdir)
@@ -320,7 +312,7 @@ real*8,                               intent(in)    :: efac,faceSpeed
 integer,                              intent(in)    :: idir,ip,ipp
 real*8, dimension(mdim),              intent(inout) :: sigma
 real*8, dimension(nq,nq,mdim),        intent(inout) :: dfdq,a,b,c
-integer,                              intent(in)    :: js,je,ks,ke,ki,ls,le,li
+integer,                              intent(in)    :: js,je,ks,ke,ls,le
 integer,                              intent(in)    :: jmax,kmax,lmax
 integer,                              intent(in)    :: dim1,dim2
 real*8, dimension(nq*jmax*kmax*lmax), intent(in)    :: q
@@ -339,19 +331,21 @@ real*8  :: qcons(nvar),dqcons(nvar),vel,rvel
 real*8  :: acoeff,bcoeff,ccoeff
 real*8  :: sigm,sig,sigp
 real*8  :: rhs(nvar),bdq(nvar),cdq(nvar)
+real*8  :: ts,te,tblock,tfj,tabc,trhs,tupdate
 !
-do l=ls,le,li
-   do k=ks,ke,ki
+do l=ls,le,gsdir
+   do k=ks,ke,gsdir
       
       !>
       ! Evaluate and store flux Jacobians in j-line 
       !>
       call store_fj(q,mdim,nq,nvar,k,l,dim0,dim1,dim2,qmult,qskip,idir,faceSpeed,gm1,efac,dfdq,&
            pressure,spec,sigma,flux_order,diss_order,jstride,jmax,kmax,lmax)
-        
+
       !>
       ! Populate A,B & C matrices in j-line
       !>
+
       call store_abc(nq,jmax,kmax,lmax,js,je,k,l,dfdq,mdim,a,b,c,h0,h0eps,sigma,dsigma,sflux,dflux,dim1,dim2,jstride)
 
       !>
@@ -359,32 +353,31 @@ do l=ls,le,li
       !>
       do j=js,je
 
-         ! k-direction                                                                                                                                                                                     
+         ! k-direction                                                                                                                                                                  
          ik = 1
          il = 0
+         
          call rhs_gs_dir(bdq,nq,nvar,j,k,l,ip, h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il,gsdir)
          
-         ! l-direction                                                                                                                                                                                      
+         ! l-direction                                                                                                                                                                          
          ik = 0
          il = 1
          call rhs_gs_dir(cdq,nq,nvar,j,k,l,ipp,h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il,gsdir)
-         !                                                                                                                                                                                                  
+         rhs=bdq+cdq
          call get_iloc(j,k,l,qmult,dim1,dim2,jstride,iloc,iqp)
-         !                                                                                                                                                                                                  
+         !                                                                                                                                        
          do n=1,nvar
-            rhs(n)       = bdq(n)  + cdq(n)
             s(iloc)      = s(iloc) + sdir(iloc) - rhs(n)
             dq_line(n,j) = s(iloc)
             sdir(iloc)   = rhs(n)
             iloc=iloc+qskip
          enddo
       enddo
-      
       ! Solve block Tridiagonal System
       lenj = je - js + 1
-      
+   
       call blockThomas(a(:,:,js:je),b(:,:,js:je),c(:,:,js:je),dq_line(:,js:je),nq,lenj)
-      
+   
       ! Extract updated RHS
       iq=(l-1)*dim2+(k-1)*dim1+(js-1)*jstride
       
@@ -426,7 +419,7 @@ vel    = qcons(idir+1)/qcons(1)
 sig    = spec(iqp) + abs(vel)
 if (gsdir.eq.1) then
    !>
-   ! (j,k-ik,l-il) 
+   ! Forward Sweep (j,k-ik,l-il) 
    !>
    call get_qcons(q,  qcons,nq,nvar,jmax,kmax,lmax,j,k-ik,l-il,qmult,qskip,dim1,dim2,jstride,iqp)
    call get_qcons(dq,dqcons,nq,nvar,jmax,kmax,lmax,j,k-ik,l-il,qmult,qskip,dim1,dim2,jstride,iqp)
@@ -439,17 +432,17 @@ if (gsdir.eq.1) then
    adq = -h0*adq
    !
 else
-   !>                                                                                                                                                                                                      
-   ! (j,k+ik,l+il)                                                                                                                                                                                         
-   !>                                                                                                                                                                                                      
+   !>                                                                                                                                                                    
+   ! Backward Sweep (j,k+ik,l+il)                                                                                                                                                
+   !>                                                                                                                                                                                   
    call get_qcons(q,  qcons,nq,nvar,jmax,kmax,lmax,j,k+ik,l+il,qmult,qskip,dim1,dim2,jstride,iqp)
    call get_qcons(dq,dqcons,nq,nvar,jmax,kmax,lmax,j,k+ik,l+il,qmult,qskip,dim1,dim2,jstride,iqp)
    vel    = qcons(idir+1)/qcons(1)
    sigp   = spec(iqp) + abs(vel)
    pcoeff = -eps*(sig+sigp)
-   !                                                                                                                                                                                                       
+   !                                                                                                                                                                                         
    call fjdq(nq,idir,gm1,qcons,dqcons,timeMetric,pcoeff,adq)
-   !                                                                                                                                                                                                      
+   !                                                                                                                                                                                     
    adq  = h0*adq
 endif
 return
