@@ -11,10 +11,10 @@ program cart
   !
   t_iter = 0.0d0
   do istep=1,nsteps
-     write(6,*) '# timestep :',istep
+     if (myid==0) write(6,*) '# timestep :',istep
      do it=1,nsubiter
         call cart_rhs_inviscid
-        !call cart_rhs_viscous
+        call cart_rhs_viscous
         call cart_bdf_source
         call cpu_time(t_start)
         call cart_lhs(it)
@@ -25,7 +25,7 @@ program cart
   enddo
   call cpu_time(t_end)
   t_iter = t_iter/real(nsubiter*nsteps)
-  write(*,*) "Average iteration time: ", t_iter
+  if (myid==0) write(*,*) "Average iteration time: ", t_iter
   !
   call cart_output
   call cart_cleanup

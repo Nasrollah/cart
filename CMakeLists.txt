@@ -21,6 +21,7 @@ INCLUDE("${CMAKE_CURRENT_SOURCE_DIR}/src/preprocessing/preprocessing.cmake")
 INCLUDE("${CMAKE_CURRENT_SOURCE_DIR}/src/postprocessing/postprocessing.cmake")
 INCLUDE("${CMAKE_CURRENT_SOURCE_DIR}/src/bc/bc.cmake")
 INCLUDE("${CMAKE_CURRENT_SOURCE_DIR}/src/analytics/analytics.cmake")
+INCLUDE("${CMAKE_CURRENT_SOURCE_DIR}/src/partition/partition.cmake")
 INCLUDE("${CMAKE_CURRENT_SOURCE_DIR}/interface/interface.cmake")
 INCLUDE("${CMAKE_CURRENT_SOURCE_DIR}/src/driver/driver.cmake")
 #
@@ -47,7 +48,7 @@ INCLUDE_DIRECTORIES(BEFORE ${CART_BUILD})
 # includes interface
 #
 SET(CART_SRCS ${LHSSRCS} ${RHSSRCS} ${PRESRCS} ${POSTSRCS} ${BCSRCS} 
-                ${ANALYTICS_SRCS} ${INTERFACESRCS})
+                ${ANALYTICS_SRCS} ${INTERFACESRCS} ${PARTITIONSRCS})
 #
 # Build the basic libCART.a one expects.
 #

@@ -1,5 +1,8 @@
 module cartInterface
   !
+  use spatialCommunication, only : initSpatialComm,partitionGrid,&
+	                           initDataBuffers,initiateDataSend,&
+                                   initiateDataRecv,finalizeCommunication
   include 'mpif.h'
   real*8, allocatable :: q(:,:,:,:),dq(:,:,:,:),x(:,:,:,:),spec(:,:,:)
   real*8, allocatable :: qn(:,:,:,:),qnm1(:,:,:,:)
@@ -31,12 +34,15 @@ module cartInterface
   integer :: nsubiter
   integer :: nsave
   real*8  :: tscal
-  real*8  :: xx0(3)
+  real*8  :: xx0(3),xx1(3)
   character*16 :: timeIntegrator,icase
   character*6 :: istor
   real*8  :: t_total,s_total,tcomp_solver,tcomp_rhs,tcomp_lhs,tcomp_ts,tcomm_ts
   integer :: ninstances,nsweep
   real,parameter :: pi=acos(-1.)
+  integer :: nplanes
+  integer :: iplanes_send(6),iplanes_recv(6)
+  integer :: iperiodic(3)
 contains
   subroutine cart_set_defaults
     !
@@ -77,14 +83,14 @@ contains
     open(unit=1,file='cart.input',form='formatted',err=1000)
     read(1,inputs)
     close(1)
-    write(6,inputs)
+    if (myid==0) write(6,inputs)
+    !write(6,inputs)
     return
 1000 continue
     write(6,*) '#################################################'
     write(6,*) 'File cart.input not found will use default values'
     write(6,*) 'File cart.input not found will use default values'
     write(6,*) '#################################################'
-    write(6,inputs)
     return
   end subroutine cart_param_input
   !
@@ -93,7 +99,7 @@ contains
   !!
   subroutine cart_mpi_init
     implicit none
-    !call mpi_init(ierr)
+    call mpi_init(ierr)
     call mpi_comm_size(mpi_comm_world,numprocs,ierr)
     call mpi_comm_rank(mpi_comm_world,myid,ierr)
     ninstances=numprocs
@@ -102,6 +108,7 @@ contains
   !> initialize data
   !!
   subroutine cart_init_data
+    !
     implicit none
     !
     ! begin
@@ -114,25 +121,6 @@ contains
     tcomp_ts     = 0.0
     tcomm_ts     = 0.0
     !
-    if (istor=='row') then
-       allocate(q(nq,jmax,kmax,lmax),dq(nq,jmax,kmax,lmax),rhs(nq,jmax,kmax,lmax),x(3,jmax,kmax,lmax))
-       allocate(qn(nq,jmax,kmax,lmax),qnm1(nq,jmax,kmax,lmax))
-       allocate(spec(jmax,kmax,lmax))
-       allocate(qstar(nq,jmax,kmax,lmax))
-       allocate(qwork(9,jmax,kmax,lmax))
-       allocate(spaceMetric(10,jmax,kmax,lmax))
-       allocate(timeMetric(3,jmax,kmax,lmax))
-       allocate(tscale(jmax,kmax,lmax))
-    else
-       allocate(q(jmax,kmax,lmax,nq),dq(jmax,kmax,lmax,nq),rhs(jmax,kmax,lmax,nq),x(jmax,kmax,lmax,3))
-       allocate(qn(jmax,kmax,lmax,nq),qnm1(jmax,kmax,lmax,nq))
-       allocate(spec(jmax,kmax,lmax))
-       allocate(qstar(jmax,kmax,lmax,nq))
-       allocate(qwork(jmax,kmax,lmax,9))
-       allocate(spaceMetric(jmax,kmax,lmax,10))
-       allocate(timeMetric(jmax,kmax,lmax,3))
-       allocate(tscale(jmax,kmax,lmax))   
-    endif
     !
     if (timeIntegrator.ne.'ts') then
        if (icase=='vortex') then
@@ -154,9 +142,37 @@ contains
        xx0=5d0
     endif
     !
-    vol=dx*dy*dz
     nvar=5
     nf=max(max(fluxorder,dissorder),viscorder)/2
+    !
+    call mpi_barrier(mpi_comm_world,ierr)
+    call initSpatialComm(mpi_comm_world)
+    call partitionGrid(jmax,kmax,lmax,dx,dy,dz,xx1,nf)
+    call initdatabuffers(istor,jmax,kmax,lmax,nq,nf)
+    !write(1000+myid,"(3(I10,1x),3(F10.4,1x))") jmax,kmax,lmax,xx1
+    call mpi_barrier(mpi_comm_world,ierr)
+    !
+    if (istor=='row') then
+       allocate(q(nq,jmax,kmax,lmax),dq(nq,jmax,kmax,lmax),rhs(nq,jmax,kmax,lmax),x(3,jmax,kmax,lmax))
+       allocate(qn(nq,jmax,kmax,lmax),qnm1(nq,jmax,kmax,lmax))
+       allocate(spec(jmax,kmax,lmax))
+       allocate(qstar(nq,jmax,kmax,lmax))
+       allocate(qwork(9,jmax,kmax,lmax))
+       allocate(spaceMetric(10,jmax,kmax,lmax))
+       allocate(timeMetric(3,jmax,kmax,lmax))
+       allocate(tscale(jmax,kmax,lmax))
+    else
+       allocate(q(jmax,kmax,lmax,nq),dq(jmax,kmax,lmax,nq),rhs(jmax,kmax,lmax,nq),x(jmax,kmax,lmax,3))
+       allocate(qn(jmax,kmax,lmax,nq),qnm1(jmax,kmax,lmax,nq))
+       allocate(spec(jmax,kmax,lmax))
+       allocate(qstar(jmax,kmax,lmax,nq))
+       allocate(qwork(jmax,kmax,lmax,9))
+       allocate(spaceMetric(jmax,kmax,lmax,10))
+       allocate(timeMetric(jmax,kmax,lmax,3))
+       allocate(tscale(jmax,kmax,lmax))   
+    endif
+    !
+    vol=dx*dy*dz
     !
     ! define the points in the grid
     !
@@ -164,9 +180,9 @@ contains
        do l=1,lmax
           do k=1,kmax
              do j=1,jmax         
-                x(1,j,k,l)=(j-1)*dx-xx0(1)
-                x(2,j,k,l)=(k-1)*dy-xx0(2)
-                x(3,j,k,l)=(l-1)*dz-xx0(3)
+                x(1,j,k,l)=(j-1)*dx-xx0(1)+xx1(1)
+                x(2,j,k,l)=(k-1)*dy-xx0(2)+xx1(2)
+                x(3,j,k,l)=(l-1)*dz-xx0(3)+xx1(3)
              enddo
           enddo
        enddo
@@ -174,15 +190,14 @@ contains
        do l=1,lmax
           do k=1,kmax
              do j=1,jmax
-                x(j,k,l,1)=(j-1)*dx-xx0(1)
-                x(j,k,l,2)=(k-1)*dy-xx0(2)
-                x(j,k,l,3)=(l-1)*dz-xx0(3)
+                x(j,k,l,1)=(j-1)*dx-xx0(1)+xx1(1)
+                x(j,k,l,2)=(k-1)*dy-xx0(2)+xx1(2)
+                x(j,k,l,3)=(l-1)*dz-xx0(3)+xx1(3)
              enddo
           enddo
        enddo
     endif
     !
-    call storep3d(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
     !
     ! initialize data
     !
@@ -197,8 +212,8 @@ contains
        elseif (icase=='taylor-green') then
           t=0d0
           call taylor_green(fsmach,gamma,q,x,&
-            nf+1,jmax-nf+1,1,kmax,nf+1,lmax-nf+1,jmax,kmax,lmax,nq,istor)
-          call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
+            nf+1,jmax-nf,nf+1,kmax-nf,nf+1,lmax-nf,jmax,kmax,lmax,nq,istor)
+          !call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
        endif
        
        if (dt > 1e5) then
@@ -224,6 +239,11 @@ contains
     endif
     !
     call init_metrics(spaceMetric,timeMetric,dx,dy,dz,jmax,kmax,lmax,istor)
+    !
+    iperiodic=(/1,1,1/)
+    call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
+    !
+    !call storep3di(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
     !
     qn=q
     qnm1=q
@@ -305,7 +325,7 @@ contains
   !! update time
   !!
   subroutine cart_update_time
-    call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
+    !call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
     n=n+1
     t=t+h
     qnm1=qn
@@ -369,6 +389,9 @@ contains
     real*8 :: t_start,t_end,tsum_ts,tsum
     !> Perform Implicit Solve (LU-SGS or ADI or DADI)
     call cpu_time(t_start)
+    !
+    call updateAllFringes(rhs,iperiodic,nf,jmax,kmax,lmax,nq)
+    !
     if (ilhs.eq.0) then
        if (istor=='row') then
           call lusgs_hyb(gamma,rey,q,rhs,tscal,timeMetric,dx,dy,dz,nq,nvar,jmax,kmax,lmax)
@@ -389,9 +412,14 @@ contains
             fluxOrder,dissOrder,dissCoef,istor,nsweep,myid)
     endif
     call cpu_time(t_end)
+    !
     !> Update Solution  
+    !
     dq = rhs/vol
+    call updateAllFringes(dq,iperiodic,nf,jmax,kmax,lmax,nq)
     q=q+dq
+    !
+    !
     if (timeIntegrator.eq.'ts') then
        call compute_norm_two(norm,dq,jmax,kmax,lmax,ninstances)
        if (myid==0) write(6,*) numprocs,it,norm
@@ -445,7 +473,7 @@ contains
    if (timeIntegrator=='ts') then
        call storep3d(x,q,myid*1000+n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
     else
-       call storep3d(x,q,n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
+       call storep3di(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
     endif
     !
   end subroutine cart_output

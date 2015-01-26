@@ -1,5 +1,6 @@
 subroutine compute_norm(norm,rhs,jmax,kmax,lmax,nq,istor)
 !
+use spatialCommunication, only : cartComm
 implicit none
 include 'mpif.h'
 !
@@ -39,7 +40,7 @@ enddo
 !
 !if (iprint==1) write(6,*) 'maxnorm=',maxnorm,mj
 !
-!call mpi_reduce(tnorm,norm,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,mpi_comm_world,ierr)
+call mpi_reduce(tnorm,norm,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,cartComm,ierr)
 norm=tnorm
 norm=sqrt(norm/(jmax*kmax*lmax))
 !
