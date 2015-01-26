@@ -6,7 +6,6 @@
 !! This is a naive implemntation with no storage. A more sophisticated 
 !! approach will follow.
 !!
-!!
 !! Versions:\par
 !!    - Leffell 12/16/2014
 !!
@@ -14,7 +13,7 @@
 !!    blockThomas.f90
 !!
 !! Source code:\par
-!!   \include gslr_naive.f90
+!!   \include gslr.f90
 !!
 !====================================================================!
 subroutine gslr(nq,nvar,gamma,q,s,spec,tscale,timeMetric,dx,dy,dz,jmax,kmax,lmax,flux_order,&
@@ -333,24 +332,35 @@ real*8  :: qcons(nvar),dqcons(nvar),vel,rvel
 real*8  :: acoeff,bcoeff,ccoeff
 real*8  :: sigm,sig,sigp
 real*8  :: bdq_p(nvar),bdq_m(nvar),cdq_p(nvar),cdq_m(nvar),rhs(nvar)
+real*8 :: ts,te,tfj,tabc,trhs,tblock,tupdate
 !
+tfj = 0.0d0
+tabc = 0.0d0
+trhs = 0.0d0
+tblock = 0.0d0
+tupdate = 0.0d0
 do l=ls,le,li
    do k=ks,ke,ki
       
       !>
       ! Evaluate and store flux Jacobians in j-line 
       !>
+      call cpu_time(ts)
       call store_fj(q,mdim,nq,nvar,k,l,dim0,dim1,dim2,qmult,qskip,idir,faceSpeed,gm1,efac,dfdq,&
            pressure,spec,sigma,flux_order,diss_order,jstride,jmax,kmax,lmax)
-        
+      call cpu_time(te)
+      tfj = tfj + te - ts
       !>
       ! Populate A,B & C matrices in j-line
       !>
+      call cpu_time(ts)
       call store_abc(nq,jmax,kmax,lmax,js,je,k,l,dfdq,mdim,a,b,c,h0,h0eps,sigma,dsigma,sflux,dflux,dim1,dim2,jstride)
-      
+      call cpu_time(te)
+      tabc =tabc + te - ts
       !>                                                                                              
       !> Evaluate the matrix-vector products Adq in k- and l-coordinate directions
-      !>    
+      !>
+      call cpu_time(ts)
       do j=js,je
          
          ! k-direction
@@ -362,7 +372,7 @@ do l=ls,le,li
          ik = 0
          il = 1
          call rhs_gs(cdq_p,cdq_m,nq,nvar,j,k,l,ipp,h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
-        
+    
          ! Update RHS
          rhs = bdq_m + bdq_p + cdq_m + cdq_p
          !
@@ -373,11 +383,15 @@ do l=ls,le,li
             iloc=iloc+qskip
          enddo
       enddo
+      call cpu_time(te)
+      trhs=trhs+te-ts
       
       ! Solve block Tridiagonal System
       lenj = je - js + 1
-      
+      call cpu_time(ts)
       call blockThomas(a(:,:,js:je),b(:,:,js:je),c(:,:,js:je),dq_line(:,js:je),nq,lenj)
+      call cpu_time(te)
+      tblock = tblock + te-ts
       
       ! Extract updated RHS
       iq=(l-1)*dim2+(k-1)*dim1+(js-1)*jstride
@@ -392,6 +406,11 @@ do l=ls,le,li
       enddo
    enddo
 enddo
+!
+!write(*,*) "tfj = ",tfj
+!write(*,*) "tabc = ",tabc
+!write(*,*) "trhs = ", trhs
+!write(*,*) "tblock = ", tblock
 !
 return
 end subroutine gslr_sweep
@@ -475,7 +494,7 @@ do j=js,je
    ccoeff =  h0eps*(sig + sigp)
    
    ! A                                                                                                                                                                                          
-   sflux = -h0*dfdq(:,:,j-1)
+   sflux = -h0*dfdq(1:nq,1:nq,j-1)
    do i = 1,nq
       dflux(i,i) = acoeff
    enddo

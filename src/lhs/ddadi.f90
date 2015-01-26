@@ -1,7 +1,7 @@
 !===================================================================!
 !> \brief
 !! This subroutine computes the implicit spatial update using
-!! an (D)iagonally (D)ominant (A)lternate-(D)irection (I)mplcit (ADI) algorithm.
+!! an (D)iagonally-(D)ominant (A)lternate-(D)irection (I)mplcit (ADI) algorithm.
 !!
 !! Versions:\par
 !!    - Leffell 09/25/2014
@@ -10,7 +10,7 @@
 !!    blockThomas.f90
 !!
 !! Source code:\par
-!!   \include adi.f90
+!!   \include ddadi.f90
 !!
 !====================================================================!
 subroutine ddadi(nq,nvar,gamma,q,s,spec,tscale,timeMetric,dx,dy,dz,jmax,kmax,lmax,flux_order,&
@@ -59,7 +59,6 @@ real*8  :: dsig
 
 !
 real*8 :: gm1,ruu,vel,rvel,fdiv,eps,ediv
-!real*8 :: ts,te,tc,tfj,tabc,tbt
 real*8 :: acoeff,bcoeff,ccoeff
 !
 ! begin
