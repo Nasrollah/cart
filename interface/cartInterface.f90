@@ -62,9 +62,9 @@ contains
     viscorder=4
     timeIntegrator='ts'
     nsubiter=5
-    jmax=40
-    kmax=40
-    lmax=40
+    jmax=60
+    kmax=60
+    lmax=60
     nsave=100
     istor='row'
     icase='taylor-green'
@@ -84,7 +84,7 @@ contains
     read(1,inputs)
     close(1)
     if (myid==0) write(6,inputs)
-    !write(6,inputs)
+!    write(6,inputs)
     return
 1000 continue
     write(6,*) '#################################################'
@@ -99,7 +99,7 @@ contains
   !!
   subroutine cart_mpi_init
     implicit none
-    call mpi_init(ierr)
+    !call mpi_init(ierr)
     call mpi_comm_size(mpi_comm_world,numprocs,ierr)
     call mpi_comm_rank(mpi_comm_world,myid,ierr)
     ninstances=numprocs
