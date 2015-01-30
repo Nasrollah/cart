@@ -1,9 +1,9 @@
-subroutine compute_norm_two(norm,rhs,jmax,kmax,lmax,ninstances)
+subroutine compute_norm_two(norm,rhs,jmax,kmax,lmax,ninstances,ndof)
 !
 implicit none
 include 'mpif.h'
 !
-integer, intent(in) :: jmax,kmax,lmax,ninstances
+integer, intent(in) :: jmax,kmax,lmax,ninstances,ndof
 real*8, intent(in) :: rhs(5,jmax,kmax,lmax)
 real*8, intent(inout) :: norm
 real*8 :: tnorm
@@ -20,17 +20,17 @@ do l=3,lmax-2
 enddo
 !
 call mpi_reduce(tnorm,norm,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,mpi_comm_world,ierr)
-norm=sqrt( norm/(jmax*kmax*lmax*ninstances) )
+norm=sqrt( norm/ndof )
 !
 return 
 end subroutine compute_norm_two
 
-subroutine compute_norm_inf(norm,rhs,jmax,kmax,lmax,ninstances)
+subroutine compute_norm_inf(norm,rhs,jmax,kmax,lmax,ninstances,ndof)
 !
 implicit none
 include 'mpif.h'
 !
-integer, intent(in) :: jmax,kmax,lmax,ninstances
+integer, intent(in) :: jmax,kmax,lmax,ninstances,ndof
 real*8, intent(in) :: rhs(5,jmax,kmax,lmax)
 real*8, intent(inout) :: norm
 real*8 :: tnorm

@@ -21,14 +21,14 @@ program partitionSpaceTime
   !
   integer, allocatable :: spaceRanks(:),timeRanks(:)
   !
-  debug = 0
+  debug = 1
   !
   call mpi_init(ierr)
   call mpi_comm_group(mpi_comm_world,globalGroup,ierr)
   call mpi_comm_rank (mpi_comm_world,myid,       ierr)
   call mpi_comm_size (mpi_comm_world,numprocs,   ierr)
   !
-  numprocs_temporal = 3
+  numprocs_temporal = 4
   numprocs_spatial  = floor(real(numprocs)/real(numprocs_temporal))
   numprocs_active   = numprocs_spatial*numprocs_temporal
   !
@@ -54,6 +54,7 @@ program partitionSpaceTime
   !
   !> Generate Communicators for Space & Time
   !
+
   ! Space
   call mpi_comm_create(mpi_comm_world,spaceGroup,spaceComm,ierr)
   call mpi_comm_rank(spaceComm,myid_spatial,ierr)
@@ -68,11 +69,17 @@ program partitionSpaceTime
      write(*,*) "myid: ",myid
      write(*,*) "myid_temporal: ", myid_temporal
      write(*,*) "myid_spatial: ", myid_spatial
-     write(*,*) "numprocs: ", numprocs
-     write(*,*) "numprocs_spatial: ", numprocs_spatial
-     write(*,*) "numprocs_temporal: ", numprocs_temporal
   endif
+  write(*,*) "myid: ",myid," mpi_comm_world: ", mpi_comm_world
+  write(*,*) "myid: ",myid," myid_t: ",myid_temporal," timeGroup: ", timeGroup
+  write(*,*) "myid: ",myid," myid_s: ",myid_temporal," spaceGroup: ", spaceGroup
   if(debug.gt.0) write(*,*) myid,myid_spatial,myid_temporal     
+  !
+  !> Test Communicators
+  !
+  if (myid.lt.numprocs_active.and.debug.gt.0) then
+     call testSpaceTimeComm(myid,myid_spatial,myid_temporal,spaceElem,timeElem,spaceComm,timeComm,spaceRanks,timeRanks)
+  endif
   !
   !> Deallocate Arrays
   !
@@ -83,7 +90,53 @@ program partitionSpaceTime
   call mpi_finalize()
   !
 end program partitionSpaceTime
-
+!
+subroutine testSpaceTimeComm(myid,myid_spatial,myid_temporal,spaceElem,timeElem,spaceComm,timeComm,spaceRanks,timeRanks)
+  !
+  implicit none
+  !
+  include 'mpif.h'
+  !
+  integer,                       intent(in) :: myid,myid_spatial,myid_temporal
+  integer,                       intent(in) :: spaceElem,spaceComm
+  integer,                       intent(in) :: timeElem,timeComm
+  integer, dimension(spaceElem), intent(in) :: spaceRanks
+  integer, dimension(timeElem),  intent(in) :: timeRanks
+  !
+  integer :: s1,s2,t1,t2,sumSpace,sumTime
+  integer :: ierr,i
+  !
+  !> Test Spatial Communicator
+  !
+  s1 = myid
+  !
+  sumSpace = sum(spaceRanks)
+  call mpi_reduce(s1,s2,1,MPI_INTEGER,MPI_SUM,0,spaceComm,ierr)
+  if (myid_spatial.eq.0) then
+     if (sumSpace.eq.s2) then
+        write(*,*) "Sucessful MPI_REDUCE(s) for myid ",myid,sumSpace,s2
+     else
+        write(*,*) "Unsucessful MPI_REDUCE(s) for myid ",myid,sumSpace,s2
+     endif
+  endif
+  !
+  !> Test Temporal Communicator
+  !
+  t1 = myid
+  !                                                                                                                                                                       
+  sumTime = sum(timeRanks)
+  call mpi_reduce(t1,t2,1,MPI_INTEGER,MPI_SUM,0,timeComm,ierr)
+  if (myid_temporal.eq.0) then
+     if (sumTime.eq.t2) then
+        write(*,*) "Sucessful MPI_REDUCE(t) for myid ",myid,sumTime,t2
+     else
+        write(*,*) "Unsucessful MPI_REDUCE(t) for myid ",myid,sumTime,t2
+     endif
+  endif
+  !
+  return
+end subroutine testSpaceTimeComm
+!
 subroutine getSpaceTimeRanks(myid,numprocs_spatial,numprocs_temporal,numprocs_active,spaceRanks,timeRanks,spaceElem,timeElem)
   !
   implicit none

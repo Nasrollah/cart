@@ -1,8 +1,8 @@
 &inputs
- nsteps=4,
+ nsteps=10,
  fsmach=0.1,
- fluxorder=2,
- dissorder=4,
+ fluxorder=6,
+ dissorder=6,
  disscoef=0.1,
  CFL=0.1,
  dt=1e10,
@@ -18,6 +18,6 @@
  nsave=100,
  istor='row',
  icase='taylor-green',
- ilhs=4,
+ ilhs=0,
  irhs=0,
 &end

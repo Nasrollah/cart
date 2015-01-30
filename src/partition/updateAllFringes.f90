@@ -3,7 +3,9 @@ subroutine updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
   !
   use spatialCommunication, only : initSpatialComm,partitionGrid,&
 	                           initDataBuffers,initiateDataSend,&
-                                   initiateDataRecv,finalizeCommunication
+                                   initiateDataRecv,finalizeCommunication,&
+                                   genSpaceTimeComm,initSpatialTemporalComm,&
+                                   getProcStats
   implicit none
   !
   integer, intent(in) :: nf   !< number of fringes
@@ -13,7 +15,7 @@ subroutine updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
   integer, intent(in) :: nq   !< number of q-variables
   !< [1,2]=[xmin,xmax],[3,4]=[ymin,ymax]
   !< [5,6]=[zmin,zmax]
-  integer, intent(in) :: iperiodic(3)        !< periodicity flag 1=periodic
+  integer, intent(in)   :: iperiodic(3)        !< periodicity flag 1=periodic
   real*8, intent(inout) :: q(jmax*kmax*lmax*nq) !< field data
   !
   integer :: nplanes

@@ -49,10 +49,12 @@ class cartModule:
                    'h-data':self.cart.h,
                    'freq-data':self.cart.freq,
                    'tcomp_ts-data':self.cart.tcomp_ts,
-                   'tcomm_ts-data':self.cart.tcomm_ts}
+                   'tcomm_ts-data':self.cart.tcomm_ts,
+                   'timecomm-data':self.cart.timecomm,
+                   'timerank-data':self.cart.myid_temporal}
 	os.chdir('../..')
 
-    def rhs(self,viscous=False,bdf=True):
+    def rhs(self,viscous=True,bdf=True):
         self.cart.cart_rhs_inviscid()
         if viscous:
             self.cart.cart_rhs_viscous()

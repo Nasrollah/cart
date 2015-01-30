@@ -5,10 +5,11 @@ program cart
   real*8 :: t_start,t_end,t_iter
   !
   call cart_param_input
-!  call cart_mpi_init
+  call cart_mpi_init
   !
   call cart_init_data
   !
+  write(*,*) "about to enter loop"
   t_iter = 0.0d0
   do istep=1,nsteps
      if (myid==0) write(6,*) '# timestep :',istep

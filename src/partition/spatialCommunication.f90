@@ -3,15 +3,24 @@ module spatialCommunication
   use mpi
   implicit none
   !
-  integer :: cartComm         !< spatial communicator
-  integer :: myid             !< myid in a global (space and time) sense
-  integer :: myid_spatial     !< myid in local communicator
-  integer :: numprocs         !< total number of processors
-  integer :: numprocs_spatial !< total number of spatial procs
-  integer :: irnum            !< request number      
-  integer :: iprocs(3)        !< total number of processors in the processor map
-  integer :: id(3)            !< my location in the processor map
-  integer :: gdim(3)          !< global dimensions of the grid
+  integer :: cartComm          !< spatial communicator
+  integer :: timeComm          !< temporal communicator
+  integer :: myid              !< myid in a global (space and time) sense
+  integer :: myid_spatial      !< myid in local spatial communicator
+  integer :: myid_temporal     !< myid in local temporal communicator
+  integer :: numprocs          !< total number of processors
+  integer :: numprocs_spatial  !< number of spatial procs for each time instance
+  integer :: numprocs_temporal !< number of procs in spatial dimension
+  integer :: numprocs_active   !< number of active processors (may be less than numprocs)
+  integer :: irnum             !< request number      
+  integer :: iprocs(3)         !< total number of processors in the processor map
+  integer :: id(3)             !< my location in the processor map
+  integer :: gdim(3)           !< global dimensions of the grid
+  integer :: globalGroup       !< MPI group containing all ranks
+  integer :: cartGroup         !< MPI group containing ranks in local spatial communicator
+  integer :: timeGroup         !< MPI group containing ranks in local temporal communicator
+  integer :: cartElem          !< number of elements in spatial communicator
+  integer :: timeElem          !< number of ranks in temporal communicator
   !
   integer, allocatable :: displ1(:)  !< displacements after partition direction 1
   integer, allocatable :: displ2(:)  !< displacements after partition direction 2   
@@ -32,6 +41,8 @@ module spatialCommunication
   integer :: jstride,dim2,dim1,buffersize,bufcount
   logical :: iskip
   !
+  integer,allocatable :: cartRanks(:),timeRanks(:)
+  !
 contains
   !
   !> Initialize the spatial communicator
@@ -50,6 +61,134 @@ contains
     !
   end subroutine initSpatialComm
   !
+  !> Initialize the spatial and temporal communicator (if numprocs_temporal > 0)
+  !
+  subroutine genSpaceTimeComm(comm,ninstances)
+    !
+    implicit none
+    !
+    integer, intent(in) :: comm,ninstances
+    !
+    if (ninstances.gt.0) then
+       call initSpatialTemporalComm(ninstances)
+    else
+       call initSpatialComm(comm)
+    endif
+    !
+    return
+  end subroutine genSpaceTimeComm
+  !
+  subroutine initSpatialTemporalComm(ninstances)
+    !
+    implicit none
+    !
+    integer, intent(in) :: ninstances
+    !
+    !> Determine Global Information (group,id,number of procs)
+    !
+    call mpi_comm_group(mpi_comm_world,globalGroup,ierr)
+    call mpi_comm_rank (mpi_comm_world,myid,       ierr)
+    call mpi_comm_size (mpi_comm_world,numprocs,   ierr)
+    !
+    !> Determine number of procs in spatial and temporal dimensions
+    !> and total number of active procs 
+    !
+    numprocs_temporal = ninstances
+    numprocs_spatial  = floor(real(numprocs)/real(numprocs_temporal))
+    numprocs_active   = numprocs_spatial*numprocs_temporal
+    !
+    !> Generate MPI Groups for Space & Time
+    !
+    allocate(timeRanks(numprocs_temporal))
+    allocate(cartRanks(numprocs_spatial))
+    !
+    call getSpaceTimeRanks(myid,numprocs_spatial,numprocs_temporal,numprocs_active,cartRanks,timeRanks,cartElem,timeElem)
+    call mpi_group_incl(globalGroup,cartElem,cartRanks(1:cartElem),cartGroup,ierr)
+    call mpi_group_incl(globalGroup,timeElem,timeRanks(1:timeElem),timeGroup,ierr)
+    !
+    !> Generate MPI Communicators for Space & Time
+    !
+    ! Space
+    call mpi_comm_create(mpi_comm_world,cartGroup,cartComm,ierr)
+    call mpi_comm_rank(cartComm,myid_spatial,ierr)
+    call mpi_comm_size(cartComm,numprocs_spatial,ierr) 
+    
+    ! Time
+    call mpi_comm_create(mpi_comm_world,timeGroup,timeComm,ierr)
+    call mpi_comm_rank(timeComm,myid_temporal,ierr)
+    call mpi_comm_size(timeComm,numprocs_temporal,ierr)
+    !
+!    write(*,*) "myid: ",myid," myid_t: ", myid_temporal, " timeComm: ", timeComm
+    deallocate(cartRanks,timeRanks)
+    !
+    return
+  end subroutine initSpatialTemporalComm
+  !
+  subroutine getSpaceTimeRanks(myid,numprocs_spatial,numprocs_temporal,numprocs_active,cartRanks,timeRanks,cartElem,timeElem)
+    !                                                                                                                                                                             
+    implicit none
+    !                                                                                                                                                                             
+    integer,                               intent(in)  :: myid
+    integer,                               intent(in)  :: numprocs_spatial
+    integer,                               intent(in)  :: numprocs_temporal
+    integer,                               intent(in)  :: numprocs_active
+    integer, dimension(numprocs_spatial),  intent(out) :: cartRanks
+    integer, dimension(numprocs_temporal), intent(out) :: timeRanks
+    integer,                               intent(out) :: cartElem,timeElem
+    !                                                                                                                                                                             
+    integer :: i,j,cartFac,timeFac
+    !                                                                                                                                                                             
+    if (myid.lt.numprocs_active) then
+       !                                                                                                                                                                          
+       !> Compute Node 
+       !                                                                                                                                                                        
+       cartElem = numprocs_spatial
+       cartFac = floor(real(myid)/real(numprocs_spatial))
+       do i = 0,numprocs_spatial-1
+          cartRanks(i+1) = i + cartFac*numprocs_spatial
+       enddo
+       
+       timeElem = numprocs_temporal
+       timeFac = mod(myid,numprocs_spatial)
+       do i = 0,numprocs_temporal-1
+          timeRanks(i+1) = i*numprocs_spatial + timeFac
+       enddo
+    else
+       !                                                                                                                                                                         
+       !> Non-compute Node                                                                                                                                                        
+       !                                                                                                                                                                          
+       cartElem = 1
+       cartRanks(1) = myid
+       
+       timeElem = 1
+       timeRanks(1)  = myid
+    endif
+    !                                                                                                                                                                             
+    return
+  end subroutine getSpaceTimeRanks
+  !
+  subroutine getProcStats(numprocs_spatial1,numprocs_temporal1,myid_spatial1,myid_temporal1,id1,cartComm1,timeComm1)
+    !
+    implicit none
+    !
+    integer, intent(out)  :: numprocs_spatial1
+    integer, intent(out)  :: numprocs_temporal1
+    integer, intent(out)  :: myid_spatial1
+    integer, intent(out)  :: myid_temporal1
+    integer, dimension(3), intent(out) :: id1
+    integer, intent(out) :: cartComm1
+    integer, intent(out) :: timeComm1
+    !
+    numprocs_spatial1  = numprocs_spatial
+    numprocs_temporal1 = numprocs_temporal
+    myid_spatial1      = myid_spatial
+    myid_temporal1     = myid_temporal
+    id1                = id
+    cartComm1          = cartComm
+    timeComm1          = timeComm
+    !
+    return
+  end subroutine getProcStats
   !> release all memory and terminate
   !> the spatial communication
   !

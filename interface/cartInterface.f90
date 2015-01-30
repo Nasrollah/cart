@@ -2,7 +2,9 @@ module cartInterface
   !
   use spatialCommunication, only : initSpatialComm,partitionGrid,&
 	                           initDataBuffers,initiateDataSend,&
-                                   initiateDataRecv,finalizeCommunication
+                                   initiateDataRecv,finalizeCommunication,&
+                                   genSpaceTimeComm,initSpatialTemporalComm,&
+                                   getProcStats
   include 'mpif.h'
   real*8, allocatable :: q(:,:,:,:),dq(:,:,:,:),x(:,:,:,:),spec(:,:,:)
   real*8, allocatable :: qn(:,:,:,:),qnm1(:,:,:,:)
@@ -23,6 +25,9 @@ module cartInterface
   real*8  :: amp,freq
   real*8  :: norm,norm_two,norm_inf,norm_rhs,norm_dq
   integer :: numprocs,myid,ierr
+  integer :: numprocs_spatial,myid_spatial
+  integer :: numprocs_temporal,myid_temporal
+  integer :: cartID(3)
   real*8 :: tm(3)
   integer :: nq,nvar
   real*8  :: t1,t2,dissCoef
@@ -43,6 +48,8 @@ module cartInterface
   integer :: nplanes
   integer :: iplanes_send(6),iplanes_recv(6)
   integer :: iperiodic(3)
+  integer :: cartComm,timeComm
+  integer :: ndof
 contains
   subroutine cart_set_defaults
     !
@@ -58,6 +65,8 @@ contains
     nq=5
     nvar=5
     rey=1e6
+    pr=0.0d0
+    prtr=0.0d0
     ivisc=0
     viscorder=4
     timeIntegrator='ts'
@@ -68,15 +77,17 @@ contains
     nsave=100
     istor='row'
     icase='taylor-green'
-    ilhs=1
     irhs=0
+    ilhs=0
     nsweep=1
+    ninstances=4
+    bctyp=0
   end subroutine cart_set_defaults
     
   subroutine cart_param_input
-    namelist /inputs/ nsteps,fluxOrder,dissOrder,dissCoef,CFL,dt,ivisc,viscorder,&
-         jmax,kmax,lmax,fsmach,rey,pr,prtr,nq,nsubiter,timeIntegrator,nsave,istor,icase,&
-	 ilhs,irhs
+    namelist /inputs/ nsteps,fsmach,fluxOrder,dissOrder,dissCoef,CFL,dt,nq,nvar,rey,pr,prtr,ivisc,viscorder,&
+         timeIntegrator,nsubiter,jmax,kmax,lmax,nsave,istor,icase,&
+	 irhs,ilhs,nsweep,ninstances,bctyp
     !
     call cart_set_defaults
     ! 
@@ -99,10 +110,11 @@ contains
   !!
   subroutine cart_mpi_init
     implicit none
-    !call mpi_init(ierr)
+    !
+!    call mpi_init(ierr)
+    !
     call mpi_comm_size(mpi_comm_world,numprocs,ierr)
     call mpi_comm_rank(mpi_comm_world,myid,ierr)
-    ninstances=numprocs
   end subroutine cart_mpi_init
   !!
   !> initialize data
@@ -142,12 +154,15 @@ contains
        xx0=5d0
     endif
     !
+    ndof=jmax*kmax*lmax*ninstances
     nvar=5
     nf=max(max(fluxorder,dissorder),viscorder)/2
     !
     call mpi_barrier(mpi_comm_world,ierr)
-    call initSpatialComm(mpi_comm_world)
+!    call initSpatialComm(mpi_comm_world)
+    call genSpaceTimeComm(mpi_comm_world,ninstances)
     call partitionGrid(jmax,kmax,lmax,dx,dy,dz,xx1,nf)
+    call getProcStats(numprocs_spatial,numprocs_temporal,myid_spatial,myid_temporal,cartID,cartComm,timeComm)
     call initdatabuffers(istor,jmax,kmax,lmax,nq,nf)
     !write(1000+myid,"(3(I10,1x),3(F10.4,1x))") jmax,kmax,lmax,xx1
     call mpi_barrier(mpi_comm_world,ierr)
@@ -203,6 +218,8 @@ contains
     !
     freq=1.
     call init_data(q,fsmach,alpha,beta,gamma,jmax,kmax,lmax,nq,istor)
+ !   if (myid.eq.40) write(*,*) myid,q(1,1:4,5,5)
+
     if (timeIntegrator .ne. 'ts') then
        if (icase=='vortex') then
           t=0d0
@@ -222,7 +239,7 @@ contains
           h=dt
        endif
     else 
-       t=(2*pi/freq)*(1.0*myid)/numprocs
+       t=(2*pi/freq)*(1.0*myid_temporal)/ninstances
        if (myid == 0) then
           if (bctyp == 2) then
              write(6,*) "Boundary Condition Type 2: Nonharmonic forcing"
@@ -231,16 +248,27 @@ contains
           endif
        endif
        amp=0.01
-       call bc_per1(q,x,fsmach,gamma,amp,freq,t,jmax,kmax,lmax,bctyp,fluxOrder,dissOrder)       
+       !
+       !> Only apply BC to inflow faces
+       !
+       if (cartID(1).eq.1)then
+          call bc_per1(q,x,fsmach,gamma,amp,freq,t,jmax,kmax,lmax,bctyp,fluxOrder,dissOrder)   
+       endif
        h =cfl*min(dz,min(dx,dy))/(1d0+fsmach)
        if (myid==0) then
           write(6,*) "Timestep = ", h
        endif
     endif
+
+!    if (myid.eq.40) write(*,*) myid,q(1,1:4,5,5)
     !
     call init_metrics(spaceMetric,timeMetric,dx,dy,dz,jmax,kmax,lmax,istor)
     !
-    iperiodic=(/1,1,1/)
+    if (timeIntegrator.eq.'ts') then
+       iperiodic=(/0,0,0/)
+    else
+       iperiodic=(/1,1,1/)
+    endif
     call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
     !
     !call storep3di(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
@@ -288,8 +316,7 @@ contains
     real*8 :: t_start,t_end
     !
     call cpu_time(t_start)
-    if (irhs.eq.0) then
-       
+    if (irhs.eq.0) then       
        call inviscidRHSunified(nq,nvar,gamma,q,rhs,spec,tm,dx,dy,dz,jmax,kmax,lmax,&
               fluxOrder,dissOrder,dissCoef,istor)
     elseif (irhs.eq.1) then
@@ -298,7 +325,7 @@ contains
     endif
     call cpu_time(t_end)
     !
-    tcomp_rhs    = tcomp_rhs    + t_end - t_start
+    tcomp_rhs = tcomp_rhs+t_end-t_start
   end subroutine cart_rhs_inviscid
   !!
   !> Evaluate RHS (viscous)
@@ -307,6 +334,7 @@ contains
     implicit none
     !
     real*8 :: t_start,t_end
+    !
     call cpu_time(t_start)
     call viscousRHS(rey,pr,prtr,nq,nvar,gamma,qstar,qwork,rhs,dx,dy,dz,jmax,kmax,lmax,&
          min(4,viscOrder),istor)
@@ -388,6 +416,7 @@ contains
     !
     real*8 :: t_start,t_end,tsum_ts,tsum
     !> Perform Implicit Solve (LU-SGS or ADI or DADI)
+    !
     call cpu_time(t_start)
     !
     call updateAllFringes(rhs,iperiodic,nf,jmax,kmax,lmax,nq)
@@ -421,25 +450,24 @@ contains
     !
     !
     if (timeIntegrator.eq.'ts') then
-       call compute_norm_two(norm,dq,jmax,kmax,lmax,ninstances)
-       if (myid==0) write(6,*) numprocs,it,norm
+       call compute_norm_two(norm,dq,jmax,kmax,lmax,ninstances,ndof)
+       if (myid==0) write(6,*) numprocs,ninstances,it,norm
     else
        call compute_norm(norm,rhs,jmax,kmax,lmax,nq,istor)
        if (myid==0) write(6,*) n,it,norm
     endif
     !
-    tcomp_lhs    = tcomp_lhs    + t_end - t_start
+    tcomp_lhs = tcomp_lhs+t_end-t_start
     !
   end subroutine cart_lhs
-  !!
-  !> compute norm on dq and rhs                                                                      
-  !!                                                                                                 
+  !
+  !> compute norm on dq and rhs                                                     
+  !                      
   subroutine ts_compute_norm(rhs_res_two,dq_res_two,rhs_res_inf,dq_res_inf)
     !use tsglobalvar
     implicit none
     real*8, intent(inout) :: rhs_res_two,dq_res_two,rhs_res_inf,dq_res_inf
-
-    !> Call Spatial Residual                                                                         
+    !> Call Spatial Residual                                                                 
     if (irhs.eq.0) then
        call inviscidRHSunified(nq,nvar,gamma,q,rhs,spec,timeMetric,dx,dy,dz,jmax,kmax,lmax,&
             fluxOrder,dissOrder,dissCoef,istor)
@@ -447,23 +475,20 @@ contains
        call inviscidRHSupwind(nq,nvar,gamma,q,rhs,spec,timeMetric,dx,dy,dz,jmax,kmax,lmax,&
             'muscl','row')
     endif
+    !> Add Temporal                                                                          
+    call ts_source_term(q,rhs,vol,myid_temporal,ninstances,jmax,kmax,lmax,timeComm)
+    !> Evaluate norm of rhs (2 and Inf)                                                      
+    call compute_norm_two(rhs_res_two,rhs,jmax,kmax,lmax,ninstances,ndof)
+    call compute_norm_inf(rhs_res_inf,rhs,jmax,kmax,lmax,ninstances,ndof)
     
-    !> Add Temporal                                                                                  
-    call ts_source_term(q,rhs,vol,myid,ninstances,jmax,kmax,lmax)
-    
-    !> Evaluate norm of rhs (2 and Inf)                                                              
-    call compute_norm_two(rhs_res_two,rhs,jmax,kmax,lmax,ninstances)
-    call compute_norm_inf(rhs_res_inf,rhs,jmax,kmax,lmax,ninstances)
-    
-    !> Evaluate norm of dq (2 and Inf)                                                                                                                                                                                                    
-    call compute_norm_two(dq_res_two,dq,jmax,kmax,lmax,ninstances)
-    call compute_norm_inf(dq_res_inf,dq,jmax,kmax,lmax,ninstances)
-
-
+    !> Evaluate norm of dq (2 and Inf)                                                       
+    call compute_norm_two(dq_res_two,dq,jmax,kmax,lmax,ninstances,ndof)
+    call compute_norm_inf(dq_res_inf,dq,jmax,kmax,lmax,ninstances,ndof)
+    !
   end subroutine ts_compute_norm
-  !!
+  !
   !> output data in plot3d format
-  !!
+  !
   subroutine cart_output
     !
     implicit none
@@ -471,7 +496,14 @@ contains
     ! write output plot3d files
     !
    if (timeIntegrator=='ts') then
-       call storep3d(x,q,myid*1000+n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
+      if (numprocs_spatial.eq.1) then
+         call storep3d(x,q,myid*1000+n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
+       else
+          if(myid.eq.0) then
+             write(6,*) "Grid and Solution files not written"
+             write(6,*) "Parallel I/O for Time-Spectral Calculations distributed in space coming soon"
+          endif
+       endif
     else
        call storep3di(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
     endif

@@ -7,7 +7,7 @@ module temp_arrays
  real*8, allocatable :: dij(:)
 end module temp_arrays
 ! 
-subroutine ts_source_term(q,rhs,vol,rank,ninstances,jmax,kmax,lmax)
+subroutine ts_source_term(q,rhs,vol,rank,ninstances,jmax,kmax,lmax,timeComm)
 !
 use temp_arrays
 !
@@ -19,7 +19,7 @@ real*8, intent(in) :: q(5,jmax,kmax,lmax)
 real*8, intent(in) :: vol
 real*8, intent(inout) :: rhs(5,jmax,kmax,lmax)
 integer, intent(in) :: rank
-integer, intent(in) :: ninstances
+integer, intent(in) :: ninstances,timeComm
 !
 integer :: i,j,k,l,n
 real*8 :: pi,xx,cotan
@@ -60,7 +60,7 @@ endif
 !
 do n=1,ninstances   
    qtmp1=dij(n)*q
-   call mpi_reduce(qtmp1,qtmp2,npts,MPI_DOUBLE_PRECISION,MPI_SUM,n-1,mpi_comm_world,ierr)
+   call mpi_reduce(qtmp1,qtmp2,npts,MPI_DOUBLE_PRECISION,MPI_SUM,n-1,timeComm,ierr)
 enddo
 !
 do l=3,lmax-2
