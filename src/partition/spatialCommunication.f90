@@ -41,7 +41,14 @@ module spatialCommunication
   integer :: jstride,dim2,dim1,buffersize,bufcount
   logical :: iskip
   !
-  integer,allocatable :: cartRanks(:),timeRanks(:)
+  integer :: n1,n2
+  integer :: myid_1,myid_2
+  integer :: elem1,elem2
+  integer :: group1,group2
+  integer :: comm1,comm2
+  integer :: topologySpaceTime
+!  integer,allocatable :: cartRanks(:),timeRanks(:)
+  integer, allocatable :: ranks1(:),ranks2(:)
   !
 contains
   !
@@ -63,14 +70,14 @@ contains
   !
   !> Initialize the spatial and temporal communicator (if numprocs_temporal > 0)
   !
-  subroutine genSpaceTimeComm(comm,ninstances)
+  subroutine genSpaceTimeComm(comm,ninstances,topologySpaceTime)
     !
     implicit none
     !
-    integer, intent(in) :: comm,ninstances
+    integer, intent(in) :: comm,ninstances,topologySpaceTime
     !
-    if (ninstances.gt.0) then
-       call initSpatialTemporalComm(ninstances)
+    if (ninstances.gt.1) then
+       call initSpatialTemporalComm(ninstances,topologySpaceTime)
     else
        call initSpatialComm(comm)
     endif
@@ -78,11 +85,11 @@ contains
     return
   end subroutine genSpaceTimeComm
   !
-  subroutine initSpatialTemporalComm(ninstances)
+  subroutine initSpatialTemporalComm(ninstances,topologySpaceTime)
     !
     implicit none
     !
-    integer, intent(in) :: ninstances
+    integer, intent(in) :: ninstances,topologySpaceTime
     !
     !> Determine Global Information (group,id,number of procs)
     !
@@ -96,74 +103,105 @@ contains
     numprocs_temporal = ninstances
     numprocs_spatial  = floor(real(numprocs)/real(numprocs_temporal))
     numprocs_active   = numprocs_spatial*numprocs_temporal
+    if (topologySpaceTime.eq.0) then
+       n1 = numprocs_spatial
+       n2 = numprocs_temporal
+    elseif (topologySpaceTime.eq.1) then
+       n1 = numprocs_temporal
+       n2 = numprocs_spatial
+    endif
     !
     !> Generate MPI Groups for Space & Time
     !
-    allocate(timeRanks(numprocs_temporal))
-    allocate(cartRanks(numprocs_spatial))
+    allocate(ranks1(n1),ranks2(n2))
     !
-    call getSpaceTimeRanks(myid,numprocs_spatial,numprocs_temporal,numprocs_active,cartRanks,timeRanks,cartElem,timeElem)
-    call mpi_group_incl(globalGroup,cartElem,cartRanks(1:cartElem),cartGroup,ierr)
-    call mpi_group_incl(globalGroup,timeElem,timeRanks(1:timeElem),timeGroup,ierr)
+    call getSpaceTimeRanks(myid,n1,n2,numprocs_active,ranks1,ranks2,elem1,elem2)
+    call mpi_group_incl(globalGroup,elem1,ranks1(1:elem1),group1,ierr)
+    call mpi_group_incl(globalGroup,elem2,ranks2(1:elem2),group2,ierr)
     !
     !> Generate MPI Communicators for Space & Time
     !
     ! Space
-    call mpi_comm_create(mpi_comm_world,cartGroup,cartComm,ierr)
-    call mpi_comm_rank(cartComm,myid_spatial,ierr)
-    call mpi_comm_size(cartComm,numprocs_spatial,ierr) 
+    call mpi_comm_create(mpi_comm_world,group1,comm1,ierr)
+    call mpi_comm_rank(comm1,myid_1,ierr)
+    call mpi_comm_size(comm1,n1,ierr) 
     
     ! Time
-    call mpi_comm_create(mpi_comm_world,timeGroup,timeComm,ierr)
-    call mpi_comm_rank(timeComm,myid_temporal,ierr)
-    call mpi_comm_size(timeComm,numprocs_temporal,ierr)
+    call mpi_comm_create(mpi_comm_world,group2,comm2,ierr)
+    call mpi_comm_rank(comm2,myid_2,ierr)
+    call mpi_comm_size(comm2,n2,ierr)
     !
-!    write(*,*) "myid: ",myid," myid_t: ", myid_temporal, " timeComm: ", timeComm
-    deallocate(cartRanks,timeRanks)
+    !    write(*,*) "myid: ",myid," myid_t: ", myid_temporal, " timeComm: ", timeComm
+    !                                                                                                               
+    !> Assign spatial and temporal communicators                                                                    
+    !                                                                                                               
+    if (topologySpaceTime.eq.0) then
+       myid_spatial  = myid_1
+       cartComm      = comm1
+       cartElem      = elem1
+!       spaceRanks    = ranks1
+       
+       myid_temporal = myid_2
+       timeComm      = comm2
+       timeElem      = elem2
+ !      timeRanks     = ranks2
+    else
+       myid_spatial = myid_2
+       cartComm     = comm2
+       cartElem     = elem2
+  !     spaceRanks   = ranks2
+       
+       myid_temporal = myid_1
+       timeComm      = comm1
+       timeElem      = elem1
+   !    timeRanks     = ranks1
+    endif
+    !    
+!    deallocate(cartRanks,timeRanks,ranks1,ranks2)
+    deallocate(ranks1,ranks2)
     !
     return
   end subroutine initSpatialTemporalComm
   !
-  subroutine getSpaceTimeRanks(myid,numprocs_spatial,numprocs_temporal,numprocs_active,cartRanks,timeRanks,cartElem,timeElem)
+  subroutine getSpaceTimeRanks(myid,n1,n2,numprocs_active,ranks1,ranks2,elem1,elem2)
     !                                                                                                                                                                             
     implicit none
     !                                                                                                                                                                             
     integer,                               intent(in)  :: myid
-    integer,                               intent(in)  :: numprocs_spatial
-    integer,                               intent(in)  :: numprocs_temporal
+    integer,                               intent(in)  :: n1
+    integer,                               intent(in)  :: n2
     integer,                               intent(in)  :: numprocs_active
-    integer, dimension(numprocs_spatial),  intent(out) :: cartRanks
-    integer, dimension(numprocs_temporal), intent(out) :: timeRanks
-    integer,                               intent(out) :: cartElem,timeElem
+    integer, dimension(n1),                intent(out) :: ranks1
+    integer, dimension(n2),                intent(out) :: ranks2
+    integer,                               intent(out) :: elem1,elem2
     !                                                                                                                                                                             
-    integer :: i,j,cartFac,timeFac
-    !                                                                                                                                                                             
+    integer :: i,j,fac1,fac2
     if (myid.lt.numprocs_active) then
-       !                                                                                                                                                                          
-       !> Compute Node 
-       !                                                                                                                                                                        
-       cartElem = numprocs_spatial
-       cartFac = floor(real(myid)/real(numprocs_spatial))
-       do i = 0,numprocs_spatial-1
-          cartRanks(i+1) = i + cartFac*numprocs_spatial
+       !                                                                                                            
+       !> Compute Node                                                                                              
+       !                                                                                                            
+       elem1 = n1
+       fac1 = floor(real(myid)/real(n1))
+       do i = 0,n1-1
+          ranks1(i+1) = i + fac1*n1
        enddo
        
-       timeElem = numprocs_temporal
-       timeFac = mod(myid,numprocs_spatial)
-       do i = 0,numprocs_temporal-1
-          timeRanks(i+1) = i*numprocs_spatial + timeFac
+       elem2 = n2
+       fac2 = mod(myid,n1)
+       do i = 0,n2-1
+          ranks2(i+1) = i*n1 + fac2
        enddo
     else
-       !                                                                                                                                                                         
-       !> Non-compute Node                                                                                                                                                        
-       !                                                                                                                                                                          
-       cartElem = 1
-       cartRanks(1) = myid
+       !                                                                                                            
+       !> Non-compute Node                                                                                          
+       !                                                                                                            
+       elem1 = 1
+       ranks1(1) = myid
        
-       timeElem = 1
-       timeRanks(1)  = myid
+       elem2 = 1
+       ranks2(1)  = myid
     endif
-    !                                                                                                                                                                             
+    !                                                                                                               
     return
   end subroutine getSpaceTimeRanks
   !

@@ -50,6 +50,7 @@ module cartInterface
   integer :: iperiodic(3)
   integer :: cartComm,timeComm
   integer :: ndof
+  integer :: topologySpaceTime
 contains
   subroutine cart_set_defaults
     !
@@ -80,14 +81,15 @@ contains
     irhs=0
     ilhs=0
     nsweep=1
-    ninstances=4
+    ninstances=1
     bctyp=0
+    topologySpaceTime=1
   end subroutine cart_set_defaults
     
   subroutine cart_param_input
     namelist /inputs/ nsteps,fsmach,fluxOrder,dissOrder,dissCoef,CFL,dt,nq,nvar,rey,pr,prtr,ivisc,viscorder,&
          timeIntegrator,nsubiter,jmax,kmax,lmax,nsave,istor,icase,&
-	 irhs,ilhs,nsweep,ninstances,bctyp
+	 irhs,ilhs,nsweep,ninstances,bctyp,topologySpaceTime
     !
     call cart_set_defaults
     ! 
@@ -160,7 +162,7 @@ contains
     !
     call mpi_barrier(mpi_comm_world,ierr)
 !    call initSpatialComm(mpi_comm_world)
-    call genSpaceTimeComm(mpi_comm_world,ninstances)
+    call genSpaceTimeComm(mpi_comm_world,ninstances,topologySpaceTime)
     call partitionGrid(jmax,kmax,lmax,dx,dy,dz,xx1,nf)
     call getProcStats(numprocs_spatial,numprocs_temporal,myid_spatial,myid_temporal,cartID,cartComm,timeComm)
     call initdatabuffers(istor,jmax,kmax,lmax,nq,nf)
