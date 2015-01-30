@@ -52,7 +52,7 @@ INSTALL directory.
     
    Runs Taylor-Green through python
 
-5. Time-Spectral execution demo (requires libTS)
+5. Time-Spectral execution demo (requires libTS:https://github.com/Time-Parallel/libTS)
 
    cd $INSTALL_DIR/demo/time_spectral
    mpirun.lsf (or equivalent) python cartTS.py
