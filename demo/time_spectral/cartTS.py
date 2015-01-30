@@ -1,5 +1,5 @@
 import os
-import sys,getopt
+import sys
 import numpy as np
 import time
 sys.path.append('../../bin')
@@ -19,14 +19,23 @@ comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 #
+# Initialize Solver and Time-Spectral Module
+#
+solver.paramInput()
+solver.initData()
+ts.setData(solver.data)
+#
 # Define Parameters
 #
-output_write  = 1
-output_file   = 'stats.tmp'
-nstep         = 500
-ncheck        = 10
+output_file   = 'stats.tmp'    #> Stores timing and residual information
+output_write  = 1              #> Write residual file? 
+nstep         = 500            #> Number of iterations
+ncheck        = 10             #> Store residual every ncheck iterations
+#
+# Preprocess
+#
 nsave         = nstep/ncheck
-itern         = ncheck*np.arange(1,nsave+1) 
+itern         = ncheck*np.arange(1,nsave+1)
 dq_res_two    = np.zeros(1)
 rhs_res_two   = np.zeros(1)
 dq_res_inf    = np.zeros(1)
@@ -34,15 +43,8 @@ rhs_res_inf   = np.zeros(1)
 tcomp         = np.zeros(nsave)
 qres          = np.zeros((nsave,2))
 rres          = np.zeros((nsave,2))
-#!
-#> Preprocess
-#!
-#solver.inputParam(cfl,bc,jmax,kmax,lmax,irhs,ilhs)
-solver.paramInput()
-solver.initData()
-ts.setData(solver.data)
 #
-#> Solve using AF scheme
+# Solve using AF scheme
 #
 s = 0
 t = time.time()
@@ -58,9 +60,9 @@ for i in range(nstep):
         rres[s,1]  = rhs_res_inf
         qres[s,1]  = dq_res_inf
         s = s + 1
-###############################################
-#         Write Output File                   #
-###############################################
+#
+# Write Output File
+#
 t_ex = time.time()-t
 t_pi = t_ex / nstep
 if rank == 0:
