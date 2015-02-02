@@ -353,12 +353,14 @@ do l=ls,le,gsdir
          ik = 1
          il = 0
          
-         call rhs_gs_dir(bdq,nq,nvar,j,k,l,ip, h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il,gsdir)
+         call rhs_gs_dir(bdq,nq,nvar,j,k,l,ip, h0,eps,q,dq,jmax,kmax,lmax,qmult,&
+	     qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il,gsdir)
          
          ! l-direction                                                                                                                                                                          
          ik = 0
          il = 1
-         call rhs_gs_dir(cdq,nq,nvar,j,k,l,ipp,h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il,gsdir)
+         call rhs_gs_dir(cdq,nq,nvar,j,k,l,ipp,h0,eps,q,dq,jmax,kmax,lmax,qmult,&
+	    qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il,gsdir)
          rhs=bdq+cdq
          call get_iloc(j,k,l,qmult,dim1,dim2,jstride,iloc,iqp)
          !                                                                                                                                        
@@ -391,7 +393,8 @@ enddo
 return
 end subroutine gslr_dir
 
-subroutine rhs_gs_dir(adq,nq,nvar,j,k,l,idir,h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il,gsdir)
+subroutine rhs_gs_dir(adq,nq,nvar,j,k,l,idir,h0,eps,q,dq,jmax,kmax,lmax,qmult,&
+	 qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il,gsdir)
 !
 implicit none
 !

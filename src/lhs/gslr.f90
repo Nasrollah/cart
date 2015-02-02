@@ -354,7 +354,8 @@ do l=ls,le,li
       ! Populate A,B & C matrices in j-line
       !>
       call cpu_time(ts)
-      call store_abc(nq,jmax,kmax,lmax,js,je,k,l,dfdq,mdim,a,b,c,h0,h0eps,sigma,dsigma,sflux,dflux,dim1,dim2,jstride)
+      call store_abc(nq,jmax,kmax,lmax,js,je,k,l,dfdq,mdim,a,b,c,&
+	   h0,h0eps,sigma,dsigma,sflux,dflux,dim1,dim2,jstride)
       call cpu_time(te)
       tabc =tabc + te - ts
       !>                                                                                              
@@ -366,12 +367,14 @@ do l=ls,le,li
          ! k-direction
          ik = 1
          il = 0
-         call rhs_gs(bdq_p,bdq_m,nq,nvar,j,k,l,ip, h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
+         call rhs_gs(bdq_p,bdq_m,nq,nvar,j,k,l,ip, h0,eps,q,dq,jmax,kmax,lmax,qmult,&
+	       qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
          
          ! l-direction
          ik = 0
          il = 1
-         call rhs_gs(cdq_p,cdq_m,nq,nvar,j,k,l,ipp,h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
+         call rhs_gs(cdq_p,cdq_m,nq,nvar,j,k,l,ipp,h0,eps,q,dq,jmax,kmax,lmax,qmult,&
+	    qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
     
          ! Update RHS
          rhs = bdq_m + bdq_p + cdq_m + cdq_p
@@ -415,7 +418,8 @@ enddo
 return
 end subroutine gslr_sweep
 
-subroutine rhs_gs(adq_p,adq_m,nq,nvar,j,k,l,idir,h0,eps,q,dq,jmax,kmax,lmax,qmult,qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
+subroutine rhs_gs(adq_p,adq_m,nq,nvar,j,k,l,idir,h0,eps,q,dq,jmax,kmax,lmax,qmult,&
+	          qskip,dim1,dim2,jstride,gm1,timeMetric,spec,ik,il)
 !
 implicit none
 !

@@ -71,9 +71,7 @@ ELSEIF(MACHINE STREQUAL "linux")
                      "lib/python${PYVER}/site-packages/numpy/core/include"
                      NUMPY_INCLUDE ${PYTHON_EXECUTABLE})
 
-       set(PYVERSION 2.7.5)
-       set(PTOOLSRTE /share/apps/hiarms/ptoolsrte-0.5.1rc4)
-       set (PYTHON_INCLUDE /usr/local/python/2.7.1/include/python2.7)
+       set (PYTHON_INCLUDE ${PYTHON_INCLUDE_DIRS})
 ELSE()
        message( FATAL_ERROR "Unsupported machine, exiting.")
 ENDIF()

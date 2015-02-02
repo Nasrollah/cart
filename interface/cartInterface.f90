@@ -51,6 +51,7 @@ module cartInterface
   integer :: cartComm,timeComm
   integer :: ndof
   integer :: topologySpaceTime
+  logical :: use_f90
 contains
   subroutine cart_set_defaults
     !
@@ -65,9 +66,9 @@ contains
     dt=1e6
     nq=5
     nvar=5
-    rey=1e6
-    pr=0.0d0
-    prtr=0.0d0
+    rey=1600
+    pr=0.71d0
+    prtr=0.9d0
     ivisc=0
     viscorder=4
     timeIntegrator='ts'
@@ -84,12 +85,13 @@ contains
     ninstances=1
     bctyp=0
     topologySpaceTime=1
+    use_f90=.false.
   end subroutine cart_set_defaults
     
   subroutine cart_param_input
     namelist /inputs/ nsteps,fsmach,fluxOrder,dissOrder,dissCoef,CFL,dt,nq,nvar,rey,pr,prtr,ivisc,viscorder,&
          timeIntegrator,nsubiter,jmax,kmax,lmax,nsave,istor,icase,&
-	 irhs,ilhs,nsweep,ninstances,bctyp,topologySpaceTime
+	 irhs,ilhs,nsweep,ninstances,bctyp,topologySpaceTime,use_f90
     !
     call cart_set_defaults
     ! 
@@ -100,10 +102,12 @@ contains
 !    write(6,inputs)
     return
 1000 continue
-    write(6,*) '#################################################'
-    write(6,*) 'File cart.input not found will use default values'
-    write(6,*) 'File cart.input not found will use default values'
-    write(6,*) '#################################################'
+    if (myid==0) then
+     write(6,*) '#################################################'
+     write(6,*) 'File cart.input not found will use default values'
+     write(6,*) 'File cart.input not found will use default values'
+     write(6,*) '#################################################'
+    endif
     return
   end subroutine cart_param_input
   !
@@ -113,7 +117,7 @@ contains
   subroutine cart_mpi_init
     implicit none
     !
-!    call mpi_init(ierr)
+    if (use_f90) call mpi_init(ierr)
     !
     call mpi_comm_size(mpi_comm_world,numprocs,ierr)
     call mpi_comm_rank(mpi_comm_world,myid,ierr)
@@ -338,7 +342,7 @@ contains
     real*8 :: t_start,t_end
     !
     call cpu_time(t_start)
-    call viscousRHS(rey,pr,prtr,nq,nvar,gamma,qstar,qwork,rhs,dx,dy,dz,jmax,kmax,lmax,&
+    call viscousRHS(rey,pr,prtr,nq,nvar,gamma,q,qwork,rhs,dx,dy,dz,jmax,kmax,lmax,&
          min(4,viscOrder),istor)
     call cpu_time(t_end)
     !
@@ -380,8 +384,8 @@ contains
     qstar=q+a2*h*(rhs)
     q=q+a1*h*(rhs)
     !
-    call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
-    call bc_case(qstar,nq,jmax,kmax,lmax,nf,icase,istor)
+    call updateAllFringes(qstar,iperiodic,nf,jmax,kmax,lmax,nq)
+    call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
     !
     !  RK stage2
     !
@@ -392,7 +396,7 @@ contains
          min(4,viscOrder),istor)
     !
     qstar=q+a3*h*(rhs)
-    call bc_case(qstar,nq,jmax,kmax,lmax,nf,icase,istor)
+    call updateAllFringes(qstar,iperiodic,nf,jmax,kmax,lmax,nq)
     !
     !  RK stage3
     !
@@ -403,8 +407,8 @@ contains
          min(4,viscOrder),istor)
     !
     q=q+a4*h*(rhs)
-    call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
-    write(6,*) n,t,norm
+    call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
+    if (myid==0) write(6,*) n-1,t,norm
     !
   end subroutine cart_step
   !!
