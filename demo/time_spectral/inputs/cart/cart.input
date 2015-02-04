@@ -18,5 +18,4 @@
  icase='taylor-green',
  irhs=0,
  ilhs=0,
- ninstances=4,
 &end
