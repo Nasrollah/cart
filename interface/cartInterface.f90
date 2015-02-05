@@ -98,7 +98,11 @@ contains
     open(unit=1,file='cart.input',form='formatted',err=1000)
     read(1,inputs)
     close(1)
-    if (myid==0) write(6,inputs)
+!
+!   convert reynolds number to be based on
+!   speed of sound instead of fsmach
+!
+    rey=rey/fsmach
 !    write(6,inputs)
     return
 1000 continue
@@ -142,21 +146,21 @@ contains
     !
     if (timeIntegrator.ne.'ts') then
        if (icase=='vortex') then
-          dx=20./(jmax)
-          dy=15./(kmax)
-          dz=10./(lmax)
+          dx=20./(jmax-1)
+          dy=15./(kmax-1)
+          dz=10./(lmax-1)
           xx0=5d0
        else
           !pi=acos(-1.)
-          dx=2*pi/(jmax)
-          dy=2*pi/(kmax)
-          dz=2*pi/(lmax)
+          dx=2*pi/(jmax-1)
+          dy=2*pi/(kmax-1)
+          dz=2*pi/(lmax-1)
           xx0=pi
        endif
     else
-       dx=10./(jmax)
-       dy=10./(kmax)
-       dz=10./(lmax)
+       dx=10./(jmax-1)
+       dy=10./(kmax-1)
+       dz=10./(lmax-1)
        xx0=5d0
     endif
     !
@@ -374,12 +378,15 @@ contains
     n=n+1
     t=t+h
     !
+    call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qwork,dx,dy,dz,jmax,kmax,lmax,&
+                             fluxOrder,istor)
+    !
     call inviscidRHSunified(nq,nvar,gamma,q,rhs,spec,tm,dx,dy,dz,jmax,kmax,lmax,&
          fluxOrder,dissOrder,dissCoef,istor)
     if (ivisc==1) &
          call viscousRHS(rey,pr,prtr,nq,nvar,gamma,q,qwork,rhs,dx,dy,dz,jmax,kmax,lmax,&
          min(4,viscOrder),istor)
-    call compute_norm(norm,rhs,jmax,kmax,lmax,nq,istor)
+    call compute_norm(nf,norm,rhs,jmax,kmax,lmax,nq,istor)
     !
     qstar=q+a2*h*(rhs)
     q=q+a1*h*(rhs)
@@ -459,8 +466,10 @@ contains
        call compute_norm_two(norm,dq,jmax,kmax,lmax,ninstances,ndof)
        if (myid==0) write(6,*) numprocs,ninstances,it,norm
     else
-       call compute_norm(norm,rhs,jmax,kmax,lmax,nq,istor)
+       call compute_norm(nf,norm,rhs,jmax,kmax,lmax,nq,istor)
        if (myid==0) write(6,*) n,it,norm
+       call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qwork,dx,dy,dz,jmax,kmax,lmax,&
+                             fluxOrder,istor)
     endif
     !
     tcomp_lhs = tcomp_lhs+t_end-t_start

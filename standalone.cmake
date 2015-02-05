@@ -72,6 +72,7 @@ ELSEIF(MACHINE STREQUAL "linux")
                      NUMPY_INCLUDE ${PYTHON_EXECUTABLE})
 
        set (PYTHON_INCLUDE ${PYTHON_INCLUDE_DIRS})
+       #set (PYTHON_INCLUDE /usr/local/python/2.7.1/include/python2.7)
 ELSE()
        message( FATAL_ERROR "Unsupported machine, exiting.")
 ENDIF()

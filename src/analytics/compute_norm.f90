@@ -1,10 +1,10 @@
-subroutine compute_norm(norm,rhs,jmax,kmax,lmax,nq,istor)
+subroutine compute_norm(nf,norm,rhs,jmax,kmax,lmax,nq,istor)
 !
 use spatialCommunication, only : cartComm
 implicit none
 include 'mpif.h'
 !
-integer, intent(in) :: jmax,kmax,lmax
+integer, intent(in) :: nf,jmax,kmax,lmax
 real*8, intent(in) :: rhs(nq*jmax*kmax*lmax)
 real*8, intent(inout) :: norm
 character*(*) :: istor
@@ -23,10 +23,10 @@ jkmax=jmax*kmax
 npts=jkmax*lmax
 call getstride(qskip,qmult,istor,npts,nq)
 !
-do l=2,lmax-1
-   do k=2,kmax-1
-      iq=(l-1)*jkmax+(k-1)*jmax+1
-      do j=2,jmax-1
+do l=nf+1,lmax-nf
+   do k=nf+1,kmax-nf
+      iq=(l-1)*jkmax+(k-1)*jmax+nf
+      do j=nf+1,jmax-nf
          iloc=iq*qmult+1
          tnorm=tnorm+rhs(iloc)**2
          if (maxnorm < abs(rhs(iloc))) then 
@@ -38,11 +38,11 @@ do l=2,lmax-1
    enddo
 enddo
 !
-!if (iprint==1) write(6,*) 'maxnorm=',maxnorm,mj
+!write(6,*) 'maxnorm=',maxnorm,mj
 !
 call mpi_reduce(tnorm,norm,1,MPI_DOUBLE_PRECISION,MPI_SUM,0,cartComm,ierr)
-norm=tnorm
-norm=sqrt(norm/(jmax*kmax*lmax))
+!norm=tnorm
+!norm=sqrt(norm/(jmax*kmax*lmax))
 !
 return 
 end subroutine compute_norm

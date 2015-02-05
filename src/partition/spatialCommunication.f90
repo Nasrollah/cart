@@ -286,9 +286,9 @@ contains
     kmax=displ2(id(2))-displ2(id(2)-1)+2*nfringe
     lmax=displ3(id(3))-displ3(id(3)-1)+2*nfringe
     !
-    xx1(1)=(displ1(id(1)-1)-(nfringe+1))*dx
-    xx1(2)=(displ2(id(2)-1)-(nfringe+1))*dy
-    xx1(3)=(displ3(id(3)-1)-(nfringe+1))*dz
+    xx1(1)=(displ1(id(1)-1)-(nfringe))*dx
+    xx1(2)=(displ2(id(2)-1)-(nfringe))*dy
+    xx1(3)=(displ3(id(3)-1)-(nfringe))*dz
     !
   end subroutine partitionGrid
   !>
