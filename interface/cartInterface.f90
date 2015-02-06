@@ -406,6 +406,8 @@ contains
     qstar=q+a2*h*(rhs)
     q=q+a1*h*(rhs)
     !
+    !call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
+    !call bc_case(qstar,nq,jmax,kmax,lmax,nf,icase,istor)
     call updateAllFringes(qstar,iperiodic,nf,jmax,kmax,lmax,nq)
     call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
     !
@@ -418,6 +420,7 @@ contains
          min(4,viscOrder),istor)
     !
     qstar=q+a3*h*(rhs)
+    !call bc_case(qstar,nq,jmax,kmax,lmax,nf,icase,istor)
     call updateAllFringes(qstar,iperiodic,nf,jmax,kmax,lmax,nq)
     !
     !  RK stage3
@@ -429,6 +432,7 @@ contains
          min(4,viscOrder),istor)
     !
     q=q+a4*h*(rhs)
+    !call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
     call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
     if (myid==0) write(6,*) n-1,t,norm
     !
@@ -527,16 +531,17 @@ contains
     !
     if (writep3d) then
        if (timeIntegrator=='ts') then
-          if (numprocs_spatial.eq.1) then
-             call storep3d(x,q,myid*1000+n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
-          else
-             if(myid.eq.0) then
-                write(6,*) "Grid and Solution files not written"
-                write(6,*) "Parallel I/O for Time-Spectral Calculations distributed in space coming"
-             endif
-          endif
+          call storep3d_parallel(x,q,myid*1000+n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
+          !if (numprocs_spatial.eq.1) then
+          !else
+          !   if(myid.eq.0) then
+          !      write(6,*) "Grid and Solution files not written"
+          !      write(6,*) "Parallel I/O for Time-Spectral Calculations distributed in space coming"
+          !   endif
+          !endif
        else
-          call storep3di(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
+          call storep3d_parallel(x,q,n-1,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
+          !call storep3d(x,q,n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
        endif
        !
     endif

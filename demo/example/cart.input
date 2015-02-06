@@ -23,4 +23,5 @@
  ilhs=0,
  irhs=0,
  use_f90=.t.,
+ writep3d=.t.,
 &end

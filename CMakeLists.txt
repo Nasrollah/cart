@@ -71,17 +71,17 @@ TARGET_LINK_LIBRARIES(linearization_test.exe CART)
 # include interface directory to 
 # build the python shared object now
 #
-ADD_SUBDIRECTORY(interface)
+#ADD_SUBDIRECTORY(interface)
 #
 # install all the required files in 
 # the installation directory
 #
 INSTALL(FILES ${CART_SOURCE}/README.md
   DESTINATION ${INSTALL_DIR}/README)
-INSTALL(FILES ${CART_SOURCE}/interface/python/cartInterface.py 
-  DESTINATION ${INSTALL_DIR}/bin)
-INSTALL(FILES ${CART_BUILD}/python/cart.so 
-  DESTINATION ${INSTALL_DIR}/bin)
+#INSTALL(FILES ${CART_SOURCE}/interface/python/cartInterface.py 
+#  DESTINATION ${INSTALL_DIR}/bin)
+#INSTALL(FILES ${CART_BUILD}/python/cart.so 
+#  DESTINATION ${INSTALL_DIR}/bin)
 INSTALL(DIRECTORY ${CART_SOURCE}/demo
   DESTINATION ${INSTALL_DIR})
 INSTALL(DIRECTORY ${CART_BUILD}/lib
