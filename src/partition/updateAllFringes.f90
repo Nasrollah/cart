@@ -3,9 +3,7 @@ subroutine updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
   !
   use spatialCommunication, only : initSpatialComm,partitionGrid,&
 	                           initDataBuffers,initiateDataSend,&
-                                   initiateDataRecv,finalizeCommunication,&
-                                   genSpaceTimeComm,initSpatialTemporalComm,&
-                                   getProcStats
+                                   initiateDataRecv,finalizeCommunication
   implicit none
   !
   integer, intent(in) :: nf   !< number of fringes

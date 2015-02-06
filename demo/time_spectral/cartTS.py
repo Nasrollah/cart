@@ -19,9 +19,16 @@ comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 #
+#
+#
+ninstances        = 4
+topologySpaceTime = 1
+#
 # Initialize Solver and Time-Spectral Module
 #
+ts.initData(ninstances,topologySpaceTime)
 solver.paramInput()
+solver.initTimeData(ninstances,ts.cartcomm,ts.timecomm)
 solver.initData()
 ts.setData(solver.data)
 #
@@ -50,7 +57,7 @@ s = 0
 t = time.time()
 for i in range(nstep):
     solver.rhs(viscous=False,bdf=False)
-    ts.af_update()
+    ts.update()
     solver.lhs(i+1)
     if np.mod(i,ncheck) == 0:
         solver.computeNorm(rhs_res_two,dq_res_two,rhs_res_inf,dq_res_inf)

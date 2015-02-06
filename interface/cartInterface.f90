@@ -1,10 +1,11 @@
+
 module cartInterface
   !
   use spatialCommunication, only : initSpatialComm,partitionGrid,&
 	                           initDataBuffers,initiateDataSend,&
                                    initiateDataRecv,finalizeCommunication,&
-                                   genSpaceTimeComm,initSpatialTemporalComm,&
-                                   getProcStats
+                                   getProcID
+  !
   include 'mpif.h'
   real*8, allocatable :: q(:,:,:,:),dq(:,:,:,:),x(:,:,:,:),spec(:,:,:)
   real*8, allocatable :: qn(:,:,:,:),qnm1(:,:,:,:)
@@ -51,7 +52,7 @@ module cartInterface
   integer :: cartComm,timeComm
   integer :: ndof
   integer :: topologySpaceTime
-  logical :: use_f90
+  logical :: use_f90,writep3d
 contains
   subroutine cart_set_defaults
     !
@@ -82,16 +83,15 @@ contains
     irhs=0
     ilhs=0
     nsweep=1
-    ninstances=1
     bctyp=0
-    topologySpaceTime=1
     use_f90=.false.
+    writep3d=.false.
   end subroutine cart_set_defaults
     
   subroutine cart_param_input
     namelist /inputs/ nsteps,fsmach,fluxOrder,dissOrder,dissCoef,CFL,dt,nq,nvar,rey,pr,prtr,ivisc,viscorder,&
          timeIntegrator,nsubiter,jmax,kmax,lmax,nsave,istor,icase,&
-	 irhs,ilhs,nsweep,ninstances,bctyp,topologySpaceTime,use_f90
+	 irhs,ilhs,nsweep,bctyp,use_f90,writep3d
     !
     call cart_set_defaults
     ! 
@@ -115,9 +115,8 @@ contains
     return
   end subroutine cart_param_input
   !
-  !!
   !> initialize mpi
-  !!
+  !
   subroutine cart_mpi_init
     implicit none
     !
@@ -125,7 +124,28 @@ contains
     !
     call mpi_comm_size(mpi_comm_world,numprocs,ierr)
     call mpi_comm_rank(mpi_comm_world,myid,ierr)
+    ! Set Default for Standard Run (only spatial parallelism)
+    cartComm = mpi_comm_world
   end subroutine cart_mpi_init
+  !
+  !> Read in Time-Spectral Data
+  !
+  subroutine cart_init_ts(ninstances1,cartComm1,timeComm1)
+    !
+    implicit none
+    !
+    integer, intent(in) :: ninstances1
+    integer, intent(in) :: cartComm1
+    integer, intent(in) :: timeComm1
+    !
+    ninstances    = ninstances1
+    cartComm      = cartComm1
+    timeComm      = timeComm1
+    !
+    call mpi_comm_rank(timeComm,myid_temporal,ierr)
+    !
+    return
+  end subroutine cart_init_ts
   !!
   !> initialize data
   !!
@@ -133,8 +153,6 @@ contains
     !
     implicit none
     !
-    ! begin
-    ! 
     t_total = 0.0
     call cpu_time(s_total)
     tcomp_solver = 0.0
@@ -142,7 +160,6 @@ contains
     tcomp_lhs    = 0.0
     tcomp_ts     = 0.0
     tcomm_ts     = 0.0
-    !
     !
     if (timeIntegrator.ne.'ts') then
        if (icase=='vortex') then
@@ -168,14 +185,16 @@ contains
     nvar=5
     nf=max(max(fluxorder,dissorder),viscorder)/2
     !
+    !> Set Spatial Communication
+    !
     call mpi_barrier(mpi_comm_world,ierr)
-!    call initSpatialComm(mpi_comm_world)
-    call genSpaceTimeComm(mpi_comm_world,ninstances,topologySpaceTime)
+    call initSpatialComm(cartComm)
     call partitionGrid(jmax,kmax,lmax,dx,dy,dz,xx1,nf)
-    call getProcStats(numprocs_spatial,numprocs_temporal,myid_spatial,myid_temporal,cartID,cartComm,timeComm)
+    call getProcID(cartID)
     call initdatabuffers(istor,jmax,kmax,lmax,nq,nf)
-    !write(1000+myid,"(3(I10,1x),3(F10.4,1x))") jmax,kmax,lmax,xx1
     call mpi_barrier(mpi_comm_world,ierr)
+    !
+    !> Allocate Field Arrays
     !
     if (istor=='row') then
        allocate(q(nq,jmax,kmax,lmax),dq(nq,jmax,kmax,lmax),rhs(nq,jmax,kmax,lmax),x(3,jmax,kmax,lmax))
@@ -199,7 +218,7 @@ contains
     !
     vol=dx*dy*dz
     !
-    ! define the points in the grid
+    !> Define the points in the grid
     !
     if (istor=='row') then
        do l=1,lmax
@@ -223,13 +242,11 @@ contains
        enddo
     endif
     !
-    !
-    ! initialize data
+    !> Initialize data
     !
     freq=1.
     call init_data(q,fsmach,alpha,beta,gamma,jmax,kmax,lmax,nq,istor)
- !   if (myid.eq.40) write(*,*) myid,q(1,1:4,5,5)
-
+    !
     if (timeIntegrator .ne. 'ts') then
        if (icase=='vortex') then
           t=0d0
@@ -259,7 +276,7 @@ contains
        endif
        amp=0.01
        !
-       !> Only apply BC to inflow faces
+       !> Only apply BC to inflow faces for Time-Spectral test case
        !
        if (cartID(1).eq.1)then
           call bc_per1(q,x,fsmach,gamma,amp,freq,t,jmax,kmax,lmax,bctyp,fluxOrder,dissOrder)   
@@ -269,8 +286,6 @@ contains
           write(6,*) "Timestep = ", h
        endif
     endif
-
-!    if (myid.eq.40) write(*,*) myid,q(1,1:4,5,5)
     !
     call init_metrics(spaceMetric,timeMetric,dx,dy,dz,jmax,kmax,lmax,istor)
     !
@@ -298,9 +313,9 @@ contains
     n=1
     !
   end subroutine cart_init_data
-  !!
+  !
   !> Read in input parameters
-  !!
+  !
   subroutine cart_init_param(cfl1,bctyp1,jmax1,kmax1,lmax1,irhs1,ilhs1)
     implicit none
     !
@@ -317,9 +332,9 @@ contains
     irhs  = irhs1
     ilhs  = ilhs1
   end subroutine cart_init_param
-  !!
+  !
   !> Evaluate RHS (Inviscid)
-  !!
+  !
   subroutine cart_rhs_inviscid
     implicit none
     !
@@ -337,9 +352,9 @@ contains
     !
     tcomp_rhs = tcomp_rhs+t_end-t_start
   end subroutine cart_rhs_inviscid
-  !!
+  !
   !> Evaluate RHS (viscous)
-  !!
+  !
   subroutine cart_rhs_viscous
     implicit none
     !
@@ -352,16 +367,16 @@ contains
     !
     tcomp_rhs    = tcomp_rhs    + t_end - t_start
   end subroutine cart_rhs_viscous
-  !!
-  !! bdf_source term for dual time stepping
-  !!
+  !
+  !> bdf_source term for dual time stepping
+  !
   subroutine cart_bdf_source
     implicit none
     rhs=rhs-(3d0*q-4d0*qn+qnm1)*dti !> bdf source term
   end subroutine cart_bdf_source
-  !!
-  !! update time
-  !!
+  !
+  !> update time
+  !
   subroutine cart_update_time
     !call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
     n=n+1
@@ -370,9 +385,9 @@ contains
     qn=q      
     tscal=(2d0/3d0)*h
   end subroutine cart_update_time
-  !!
+  !
   !> integrate in time using RK3
-  !!
+  !
   subroutine cart_step
     !
     n=n+1
@@ -418,17 +433,18 @@ contains
     if (myid==0) write(6,*) n-1,t,norm
     !
   end subroutine cart_step
-  !!
+  !
   !> LHS 
-  !! solve the linearized problem 
-  !! A\delta q = -R(q)
-  !!
+  ! solve the linearized problem 
+  ! A\delta q = -R(q)
+  !
   subroutine cart_lhs(it)
     implicit none
     integer, intent(in) :: it
     !
     real*8 :: t_start,t_end,tsum_ts,tsum
-    !> Perform Implicit Solve (LU-SGS or ADI or DADI)
+    !
+    !> Perform Implicit Solve (LU-SGS or ADI or DADI or GSLR)
     !
     call cpu_time(t_start)
     !
@@ -479,7 +495,6 @@ contains
   !> compute norm on dq and rhs                                                     
   !                      
   subroutine ts_compute_norm(rhs_res_two,dq_res_two,rhs_res_inf,dq_res_inf)
-    !use tsglobalvar
     implicit none
     real*8, intent(inout) :: rhs_res_two,dq_res_two,rhs_res_inf,dq_res_inf
     !> Call Spatial Residual                                                                 
@@ -508,26 +523,27 @@ contains
     !
     implicit none
     !
-    ! write output plot3d files
+    !> write output plot3d files
     !
-   if (timeIntegrator=='ts') then
-      if (numprocs_spatial.eq.1) then
-         call storep3d(x,q,myid*1000+n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
-       else
-          if(myid.eq.0) then
-             write(6,*) "Grid and Solution files not written"
-             write(6,*) "Parallel I/O for Time-Spectral Calculations distributed in space coming soon"
+    if (writep3d) then
+       if (timeIntegrator=='ts') then
+          if (numprocs_spatial.eq.1) then
+             call storep3d(x,q,myid*1000+n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
+          else
+             if(myid.eq.0) then
+                write(6,*) "Grid and Solution files not written"
+                write(6,*) "Parallel I/O for Time-Spectral Calculations distributed in space coming"
+             endif
           endif
+       else
+          call storep3di(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
        endif
-    else
-       call storep3di(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
+       !
     endif
-    !
   end subroutine cart_output
-  !!
-  !> clean up all the arrays
-  !> and exit gracefully
-  !!
+  !
+  !> clean up all the arrays and exit gracefully
+  !
   subroutine cart_cleanup
     implicit none
     !

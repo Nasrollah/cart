@@ -22,5 +22,5 @@
  icase='taylor-green',
  ilhs=0,
  irhs=0,
- use_f90=.true.,
+ use_f90=.t.,
 &end

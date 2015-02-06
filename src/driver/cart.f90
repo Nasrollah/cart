@@ -7,7 +7,10 @@ program cart
   call cart_param_input
   call cart_mpi_init
   !
+  ! fix this to send in mpi_comm_world for cartComm
+  ! call cart_init_data(cartComm,timeComm,ninstance,myid_temporal)
   call cart_init_data
+!(MPI_COMM_WORLD,0,1,0)
   !
   t_iter = 0.0d0
   do istep=1,nsteps

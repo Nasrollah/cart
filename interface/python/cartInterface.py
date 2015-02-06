@@ -35,9 +35,12 @@ class cartModule:
 	self.cart.cart_param_input()
 	os.chdir('../../')
 
+    def initTimeData(self,ninstances,cartComm,timeComm):
+        self.cart.cart_init_ts(ninstances,cartComm,timeComm)
+
     def initData(self):
-	os.chdir('inputs/'+self.modulename)
-	self.cart.cart_init_data()
+        os.chdir('inputs/'+self.modulename)
+        self.cart.cart_init_data()
         self.data={'q-data':self.cart.q,
                    's-data':self.cart.rhs,
                    'vol-data':self.cart.vol,
@@ -49,10 +52,10 @@ class cartModule:
                    'h-data':self.cart.h,
                    'freq-data':self.cart.freq,
                    'tcomp_ts-data':self.cart.tcomp_ts,
-                   'tcomm_ts-data':self.cart.tcomm_ts,
-                   'timecomm-data':self.cart.timecomm,
-                   'timerank-data':self.cart.myid_temporal}
-	os.chdir('../..')
+                   'tcomm_ts-data':self.cart.tcomm_ts}
+        os.chdir('../..')
+
+
 
     def rhs(self,viscous=True,bdf=True):
         self.cart.cart_rhs_inviscid()
