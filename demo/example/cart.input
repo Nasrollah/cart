@@ -1,19 +1,19 @@
 &inputs
- nsteps=1,
+ nsteps=2000,
  fsmach=0.1,
  fluxorder=6,
  dissorder=6,
  disscoef=0.1,
  CFL=1d0,    !< not used if dt < 1e6
- dt=0.01d0,
+ dt=0.1d0,
  nq=6,
  rey=1600,
  pr=0.71d0,
  prtr=0.9d0
  ivisc=1,
  viscorder=4,
- timeIntegrator='rk3',
- nsubiter=1,
+ timeIntegrator='bdf2',
+ nsubiter=5,
  jmax=64,
  kmax=64,
  lmax=64,
