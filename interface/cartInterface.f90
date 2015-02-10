@@ -9,7 +9,7 @@ module cartInterface
   include 'mpif.h'
   real*8, allocatable :: q(:,:,:,:),dq(:,:,:,:),x(:,:,:,:),spec(:,:,:)
   real*8, allocatable :: qn(:,:,:,:),qnm1(:,:,:,:)
-  real*8, allocatable :: rhs(:,:,:,:),qstar(:,:,:,:) ,qwork(:,:,:,:)
+  real*8, allocatable :: rhs(:,:,:,:),qstar(:,:,:,:) ,qwork(:,:,:,:),qq(:,:,:,:)
   real*8, allocatable :: spaceMetric(:,:,:,:),timeMetric(:,:,:,:)
   real*8, allocatable :: tscale(:,:,:)
   !
@@ -169,9 +169,9 @@ contains
           xx0=5d0
        else
           !pi=acos(-1.)
-          dx=2*pi/(jmax-1)
-          dy=2*pi/(kmax-1)
-          dz=2*pi/(lmax-1)
+          dx=2*pi/jmax
+          dy=2*pi/kmax
+          dz=2*pi/lmax
           xx0=pi
        endif
     else
@@ -201,6 +201,7 @@ contains
        allocate(qn(nq,jmax,kmax,lmax),qnm1(nq,jmax,kmax,lmax))
        allocate(spec(jmax,kmax,lmax))
        allocate(qstar(nq,jmax,kmax,lmax))
+       allocate(qq(nq,jmax,kmax,lmax))
        allocate(qwork(9,jmax,kmax,lmax))
        allocate(spaceMetric(10,jmax,kmax,lmax))
        allocate(timeMetric(3,jmax,kmax,lmax))
@@ -210,6 +211,7 @@ contains
        allocate(qn(jmax,kmax,lmax,nq),qnm1(jmax,kmax,lmax,nq))
        allocate(spec(jmax,kmax,lmax))
        allocate(qstar(jmax,kmax,lmax,nq))
+       allocate(qq(jmax,kmax,lmax,nq))
        allocate(qwork(jmax,kmax,lmax,9))
        allocate(spaceMetric(jmax,kmax,lmax,10))
        allocate(timeMetric(jmax,kmax,lmax,3))
@@ -295,6 +297,10 @@ contains
        iperiodic=(/1,1,1/)
     endif
     call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
+    !call filter(nq,nvar,jmax,kmax,lmax,q,qwork,fluxOrder,istor)
+    !call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
+    call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qq,qwork,dx,dy,dz,jmax,kmax,lmax,&
+                             fluxOrder,istor)
     !
     !call storep3di(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
     !
@@ -393,7 +399,7 @@ contains
     n=n+1
     t=t+h
     !
-    call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qwork,dx,dy,dz,jmax,kmax,lmax,&
+    call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qq,qwork,dx,dy,dz,jmax,kmax,lmax,&
                              fluxOrder,istor)
     !
     call inviscidRHSunified(nq,nvar,gamma,q,rhs,spec,tm,dx,dy,dz,jmax,kmax,lmax,&
@@ -434,6 +440,8 @@ contains
     q=q+a4*h*(rhs)
     !call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
     call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
+    !call filter(nq,nvar,jmax,kmax,lmax,q,qwork,fluxOrder,istor)
+    !call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
     if (myid==0) write(6,*) n-1,t,norm
     !
   end subroutine cart_step
@@ -453,6 +461,9 @@ contains
     call cpu_time(t_start)
     !
     call updateAllFringes(rhs,iperiodic,nf,jmax,kmax,lmax,nq)
+    if (it==1 .and. timeIntegrator .ne. 'ts') &
+     call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qq,qwork,dx,dy,dz,jmax,kmax,lmax,&
+                             fluxOrder,istor)
     !
     if (ilhs.eq.0) then
        if (istor=='row') then
@@ -480,6 +491,8 @@ contains
     dq = rhs/vol
     call updateAllFringes(dq,iperiodic,nf,jmax,kmax,lmax,nq)
     q=q+dq
+    !call filter(nq,nvar,jmax,kmax,lmax,q,qwork,fluxOrder,istor)
+    !call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
     !
     !
     if (timeIntegrator.eq.'ts') then
@@ -488,8 +501,6 @@ contains
     else
        call compute_norm(nf,norm,rhs,jmax,kmax,lmax,nq,istor)
        if (myid==0) write(6,*) n,it,norm
-       call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qwork,dx,dy,dz,jmax,kmax,lmax,&
-                             fluxOrder,istor)
     endif
     !
     tcomp_lhs = tcomp_lhs+t_end-t_start
@@ -540,7 +551,7 @@ contains
           !   endif
           !endif
        else
-          call storep3d_parallel(x,q,n-1,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
+          call storep3d_parallel(x,qq,n-1,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
           !call storep3d(x,q,n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
        endif
        !

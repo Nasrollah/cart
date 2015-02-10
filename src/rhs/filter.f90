@@ -12,13 +12,14 @@
 !!   \include filter
 !!
 !====================================================================!
-subroutine filter(nq,nvar,jmax,kmax,lmax,q,flux_order,istor)
+subroutine filter(nq,nvar,jmax,kmax,lmax,q,qwork,flux_order,istor)
 !
 implicit none
 !
 integer, intent(in) :: nq                        !< number of field variables stored
 integer, intent(in) :: nvar                      !< number of field variables to compute residuals for
 real*8,  intent(inout) :: q(nq*jmax*kmax*lmax)      !< solution variables
+real*8,  intent(inout) :: qwork(nq*jmax*kmax*lmax)  !< solution variables
 integer, intent(in) :: jmax                      !< coordinate 1 dimension
 integer, intent(in) :: kmax                      !< coordinate 2 dimension
 integer, intent(in) :: lmax                      !< coordinate 3 dimension
@@ -27,7 +28,7 @@ character*(*), intent(in) :: istor               !< storage type
 !
 ! local variables
 !
-integer :: j,k,l,n,mdim
+integer :: i,j,k,l,n,mdim
 integer :: js,je,ks,ke,ls,le,nf,nd
 real*8, allocatable :: pressure(:)
 real*8, allocatable :: f(:,:)
@@ -42,6 +43,7 @@ integer :: idim(2,3),stride(3),ldim(3),kdim(3)
 integer :: dim0(3),dim2,dim1
 !
 real*8 :: gm1,ruu,vel,rvel,fdiv,eps,ediv,alphaf
+real*8 :: qerr,filter_strength
 !
 ! begin
 !
@@ -60,7 +62,8 @@ else
 endif
 !
 nf=flux_order/2
-alphaf=(-1d0)**(nf+1)*(2d0**(-2*nf))
+filter_strength=0.5d0
+alphaf=0.5d0*(-1d0)**(nf+1)*(2d0**(-2*nf))
 !
 js=nf+1
 je=jmax-nf
@@ -81,6 +84,11 @@ stride=(/1,jmax,jkmax/)
 ldim=(/jkmax,jkmax,jmax/)
 kdim=(/jmax,1,1/)
 !
+!
+do i=1,nq*jmax*kmax*lmax
+ qwork(i)=0d0
+enddo
+!
 ! coordinate 1 direction fluxes
 !
 do idir=1,3
@@ -98,6 +106,10 @@ do idir=1,3
    ke=idim(2,ip)
    ls=idim(1,ipp)
    le=idim(2,ipp)
+   !
+   jstride=stride(idir)   
+   dim2=ldim(idir)
+   dim1=kdim(idir)
    !
    do l=ls,le
       do k=ks,ke
@@ -122,13 +134,13 @@ do idir=1,3
          !
          do j=js,je
            if (flux_order==2) then
-              f(:,j)=ft(:,j)+alphaf*(-(ft(:,j-1)+ft(:,j+1))+2d0*ft(:,j))
+              f(:,j)=alphaf*(-(ft(:,j-1)+ft(:,j+1))+2d0*ft(:,j))
            else if (flux_order==4) then
-              f(:,j)=ft(:,j)+alphaf*(-(ft(:,j-2)+ft(:,j+2))+&
+              f(:,j)=alphaf*(-(ft(:,j-2)+ft(:,j+2))+&
                                             4d0*(ft(:,j-1)+ft(:,j+1))-&
                                             6d0*ft(:,j))
            else if (flux_order==6) then
-               f(:,j)=ft(:,j)+alphaf*(-(ft(:,j-3)+ft(:,j+3))+&
+               f(:,j)=alphaf*(-(ft(:,j-3)+ft(:,j+3))+&
                                              6d0*(ft(:,j-2)+ft(:,j+2))&
                                              -15d0*(ft(:,j-1)+ft(:,j+1))+&
                                              20d0*ft(:,j))
@@ -140,7 +152,7 @@ do idir=1,3
          do j=js,je
             iloc=iq*qmult+1
             do n=1,nvar
-               q(iloc)=f(n,j)
+               qwork(iloc)=qwork(iloc)-f(n,j)
                iloc=iloc+qskip
             enddo
             iq=iq+jstride
@@ -149,6 +161,30 @@ do idir=1,3
       enddo
    enddo
 enddo
+!
+js=nf+1
+je=jmax-nf
+ks=nf+1
+ke=kmax-nf
+ls=nf+1
+le=lmax-nf
+iq=(ls-1)*ldim(1)+(ks-1)*kdim(1)+js-1
+qerr=0d0
+do l=ls,le
+   do k=ks,ke
+      do j=js,je
+         iloc=iq*qmult+1
+         do n=1,nvar 
+            qerr=qerr+qwork(iloc)**2
+            q(iloc)=q(iloc)+qwork(iloc)
+            iloc=iloc+qskip
+         enddo
+         iq=iq+1
+      enddo
+   enddo
+enddo
+!
+!write(6,*) 'qerr=',qerr
 !
 deallocate(f,ft)
 !

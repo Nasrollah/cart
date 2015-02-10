@@ -16,7 +16,7 @@
 !!   \include compute_tke_params
 !!
 !====================================================================!
-subroutine compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qwork,dx,dy,dz,jmax,kmax,lmax,&
+subroutine compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qstar,qwork,dx,dy,dz,jmax,kmax,lmax,&
                              flux_order,istor)
 !
 use mpi
@@ -32,6 +32,7 @@ integer, intent(in) :: nvar                      !< number of field variables to
 real*8, intent(in) :: gamma                      !< ratio of specific heats
 real*8,  intent(in) :: q(nq*jmax*kmax*lmax)      !< solution variables
 real*8,  intent(inout) :: qwork(9*jmax*kmax*lmax) !< work array for storing velocity gradient
+real*8,  intent(inout) :: qstar(nq*jmax*kmax*lmax) !< work array for storing velocity gradient
 real*8,  intent(in)    :: dx                     !< coordinate 1 spacing
 real*8,  intent(in)    :: dy                     !< coordinate 2 spacing
 real*8,  intent(in)    :: dz                     !< coordinate 3 spacing
@@ -79,6 +80,9 @@ ks=nf+1
 ke=kmax-nf
 js=nf+1
 je=jmax-nf
+if (id(1)==iprocs(1)) je=je+1
+if (id(2)==iprocs(2)) ke=ke+1
+if (id(3)==iprocs(3)) le=le+1
 !
 ! change variables to primitive and
 ! compute velocity gradients
@@ -153,7 +157,24 @@ do l=ls,le
          ! contribution from compressibility
          ! 
          pp=qprim(1)*qprim(5)/gamma
-         e3_local=e3_local-(gradu(1,1)+gradu(2,2)+gradu(3,3))*dv
+         e3_local=e3_local-pp*(gradu(1,1)+gradu(2,2)+gradu(3,3))*dv
+         !
+         iq=(l-1)*jkmax+(k-1)*jmax+(j-1)
+         iloc=iq*qmult+1
+         qstar(iloc)=0.5d0*qprim(1)*(qprim(2)**2+qprim(3)**2+qprim(4)**2) !-q1
+         iloc=iloc+qskip
+         qstar(iloc)=(0.5d0*((gradu(1,2)+gradu(2,1))**2+&
+                                  (gradu(1,3)+gradu(3,1))**2+&
+                                  (gradu(2,3)+gradu(3,2))**2)+&
+                                  (gradu(1,1)-bulk_strain)**2+&
+                                  (gradu(2,2)-bulk_strain)**2+&
+                                  (gradu(3,3)-bulk_strain)**2)           !-q2
+          iloc=iloc+qskip
+          qstar(iloc)=pp*(gradu(1,1)+gradu(2,2)+gradu(3,3))              !-q3
+          iloc=iloc+qskip
+          qstar(iloc)=divv                                               !-q4
+          iloc=iloc+qskip
+          qstar(iloc)=qprim(1)*0.5d0*dot_product(vorticity,vorticity)    !-q5
       enddo
    enddo
 enddo

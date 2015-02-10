@@ -1,5 +1,5 @@
 &inputs
- nsteps=20000,
+ nsteps=1,
  fsmach=0.1,
  fluxorder=6,
  dissorder=6,
