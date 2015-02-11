@@ -12,7 +12,7 @@
 !!   \include filter
 !!
 !====================================================================!
-subroutine filter(nq,nvar,jmax,kmax,lmax,q,qwork,flux_order,istor)
+subroutine filter(nq,nvar,jmax,kmax,lmax,q,qwork,flux_order,istor,filter_strength)
 !
 implicit none
 !
@@ -25,6 +25,7 @@ integer, intent(in) :: kmax                      !< coordinate 2 dimension
 integer, intent(in) :: lmax                      !< coordinate 3 dimension
 integer, intent(in) :: flux_order                !< order of physical flux
 character*(*), intent(in) :: istor               !< storage type
+real*8,  intent(in) :: filter_strength           !< Filter Strength
 !
 ! local variables
 !
@@ -43,7 +44,7 @@ integer :: idim(2,3),stride(3),ldim(3),kdim(3)
 integer :: dim0(3),dim2,dim1
 !
 real*8 :: gm1,ruu,vel,rvel,fdiv,eps,ediv,alphaf
-real*8 :: qerr,filter_strength
+real*8 :: qerr
 !
 ! begin
 !
@@ -62,8 +63,7 @@ else
 endif
 !
 nf=flux_order/2
-filter_strength=0.5d0
-alphaf=0.5d0*(-1d0)**(nf+1)*(2d0**(-2*nf))
+alphaf=filter_strength*(-1d0)**(nf+1)*(2d0**(-2*nf))
 !
 js=nf+1
 je=jmax-nf

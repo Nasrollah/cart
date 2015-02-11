@@ -53,6 +53,7 @@ module cartInterface
   integer :: ndof
   integer :: topologySpaceTime
   logical :: use_f90,writep3d
+  real*8  :: filter_strength
 contains
   subroutine cart_set_defaults
     !
@@ -86,18 +87,23 @@ contains
     bctyp=0
     use_f90=.false.
     writep3d=.false.
+    filter_strength=0.0d0
   end subroutine cart_set_defaults
     
   subroutine cart_param_input
     namelist /inputs/ nsteps,fsmach,fluxOrder,dissOrder,dissCoef,CFL,dt,nq,nvar,rey,pr,prtr,ivisc,viscorder,&
          timeIntegrator,nsubiter,jmax,kmax,lmax,nsave,istor,icase,&
-	 irhs,ilhs,nsweep,bctyp,use_f90,writep3d
+	 irhs,ilhs,nsweep,bctyp,use_f90,writep3d,filter_strength
     !
     call cart_set_defaults
     ! 
     open(unit=1,file='cart.input',form='formatted',err=1000)
     read(1,inputs)
     close(1)
+    
+    if (filter_strength.gt.1.0d0) then
+       filter_strength=1.0d0
+    endif
 !
 !   convert reynolds number to be based on
 !   speed of sound instead of fsmach
@@ -297,10 +303,14 @@ contains
        iperiodic=(/1,1,1/)
     endif
     call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
-    !call filter(nq,nvar,jmax,kmax,lmax,q,qwork,fluxOrder,istor)
-    !call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
-    call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qq,qwork,dx,dy,dz,jmax,kmax,lmax,&
-                             fluxOrder,istor)
+    if (filter_strength.gt.0) then
+       call filter(nq,nvar,jmax,kmax,lmax,q,qwork,fluxOrder,istor,filter_strength)
+       call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
+    endif
+    if (icase.eq.'taylor-green') then
+       call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qq,qwork,dx,dy,dz,jmax,kmax,lmax,&
+            fluxOrder,istor)
+    endif
     !
     !call storep3di(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
     !
@@ -399,8 +409,10 @@ contains
     n=n+1
     t=t+h
     !
-    call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qq,qwork,dx,dy,dz,jmax,kmax,lmax,&
-                             fluxOrder,istor)
+    if (icase.eq.'taylor-green') then
+       call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qq,qwork,dx,dy,dz,jmax,kmax,lmax,&
+            fluxOrder,istor)
+    endif
     !
     call inviscidRHSunified(nq,nvar,gamma,q,rhs,spec,tm,dx,dy,dz,jmax,kmax,lmax,&
          fluxOrder,dissOrder,dissCoef,istor)
@@ -440,8 +452,10 @@ contains
     q=q+a4*h*(rhs)
     !call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
     call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
-    !call filter(nq,nvar,jmax,kmax,lmax,q,qwork,fluxOrder,istor)
-    !call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
+    if (filter_strength.gt.0) then
+       call filter(nq,nvar,jmax,kmax,lmax,q,qwork,fluxOrder,istor,filter_strength)
+       call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
+    endif
     if (myid==0) write(6,*) n-1,t,norm
     !
   end subroutine cart_step
@@ -491,9 +505,10 @@ contains
     dq = rhs/vol
     call updateAllFringes(dq,iperiodic,nf,jmax,kmax,lmax,nq)
     q=q+dq
-    !call filter(nq,nvar,jmax,kmax,lmax,q,qwork,fluxOrder,istor)
-    !call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
-    !
+    if (filter_strength.gt.0) then
+       call filter(nq,nvar,jmax,kmax,lmax,q,qwork,fluxOrder,istor,filter_strength)
+       call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
+    endif
     !
     if (timeIntegrator.eq.'ts') then
        call compute_norm_two(norm,dq,jmax,kmax,lmax,ninstances,ndof)

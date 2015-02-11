@@ -96,6 +96,7 @@ else
    nf=max(3,nf)
 endif
 !
+!write(*,*) "FDIV = ", fdiv
 eps=ediv*efac
 !
 js=nf+1
@@ -209,11 +210,14 @@ do idir=1,1
          do j=js-1,je
             if (flux_order==2) then
                sflux=(ft(:,j)+ft(:,j+1))*fdiv
+!               if (j==js) write(*,*) "fluxOrder = 2"
             else if (flux_order==4) then
                sflux=fdiv*(-ft(:,j-1)+7d0*(ft(:,j+1)+ft(:,j))-ft(:,j+2))
+ !              if (j==js) write(*,*) "fluxOrder = 4"
             else
                sflux=fdiv*(ft(:,j-2)-8d0*(ft(:,j-1)+ft(:,j+2))+&
                     37d0*(ft(:,j)+ft(:,j+1))+ft(:,j+3))
+  !             if (j==js) write(*,*) "fluxOrder = 6"
             endif
             
             if (diss_order==2) then

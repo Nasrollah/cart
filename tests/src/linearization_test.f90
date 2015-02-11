@@ -96,13 +96,17 @@ program linearizationTest
   bctyp = 0
 
   ! Numerical Scheme Inputs (to be inputs)
+  dissOrder = 6
+  dissCoef  = 0.0d0!0.5d0
+
+  ! Gives Second Order
   dissOrder = 2
   dissCoef  = 0.5d0!0.5d0
   write(*,*) "rho = ", q(1,20,20,20)
   do i=1,3
      
      fluxOrder = 2*i
-
+     write(*,*) "fluxOrder = ",fluxOrder
      ! Evaluate R(q)
      call bc_per1(q,  x,fsmach,gamma,amp,freq,t,jmax,kmax,lmax,bctyp,fluxOrder,dissOrder)
      call inviscidRHSunified2(nq,nvar,gamma,q,  rhs_q,  spec,timeMetric,dx,dy,dz,jmax,kmax,lmax,fluxOrder,dissOrder,dissCoef,'row')
@@ -118,7 +122,9 @@ program linearizationTest
         
         ! Preturb only single q value
         dq = 0.0d0
-        dq(1,20,20,20) = s_dq
+        
+        dq(1:5,20,20,20) = s_dq
+        
         !dq  = s_dq
  
         ! Update qdq = q + dq 
@@ -130,7 +136,7 @@ program linearizationTest
         call inviscidRHSunified2(nq,nvar,gamma,qdq,rhs_qdq,spec,timeMetric,&
 	   dx,dy,dz,jmax,kmax,lmax,fluxOrder,dissOrder,dissCoef,'row')
         
-        !write(8,*) "rhs_qdq(5,20,20,20): ", rhs_qdq(5,20,20,20)
+!        if (j == 5) write(*,*) "rhs_qdq(1,20,20,20): ", rhs_qdq(1,20,20,20)
 
         ! Evaluate (dR/dq)*delta_q               
         call fluxJacobianMatVec(nq,nvar,gamma,q,rhs,spec,tscale,timeMetric,dx,dy,dz,&
@@ -139,7 +145,8 @@ program linearizationTest
         !write(8,*) "Adq(5,20,20,20): ", rhs(5,20,20,20)
 
         ! Store R(q+dq)-R(q) and dRdQ*dQ for coarsest and second order                                   
-        if (i.eq.1.and.j.eq.1) then
+        !if (i.eq.1.and.j.eq.1) then
+        if(j.eq.1) then
            iloc = 0
            max_res   = 0.0d0
            max_res_r = 0.0d0
@@ -149,12 +156,16 @@ program linearizationTest
                  do jj = 1,jmax
                     iloc = iloc + 1
                     if (jj.gt.2.and.kk.gt.2.and.ll.gt.2.and.jj.lt.(jmax-1).and.kk.lt.(kmax-1).and.ll.lt.(lmax-1)) then
-                       res_r(iloc) = rhs_qdq(1,jj,kk,ll)-rhs_q(1,jj,kk,ll)
+                       res_r(iloc) = rhs_qdq(1,jj,kk,ll)-rhs_q(1,jj,kk,ll)+&
+                                     rhs_qdq(2,jj,kk,ll)-rhs_q(2,jj,kk,ll)+&
+                                     rhs_qdq(3,jj,kk,ll)-rhs_q(3,jj,kk,ll)+&
+                                     rhs_qdq(4,jj,kk,ll)-rhs_q(4,jj,kk,ll)+&
+                                     rhs_qdq(5,jj,kk,ll)-rhs_q(5,jj,kk,ll)
                        if (abs(res_r(iloc)).gt.max_res_r) then
                           max_res_r = abs(res_r(iloc))
                        endif
                        
-                       res_l(iloc) = rhs(1,jj,kk,ll)
+                       res_l(iloc) = rhs(1,jj,kk,ll)+rhs(2,jj,kk,ll)+rhs(3,jj,kk,ll)+rhs(4,jj,kk,ll)+rhs(5,jj,kk,ll)
                        if (abs(res_l(iloc)).gt.max_res_l) then
                           max_res_l = abs(res_l(iloc))
                        endif
@@ -233,20 +244,22 @@ subroutine eval_two_norm(norm,rhs,jmax,kmax,lmax)
   real*8, intent(inout) :: norm                                  
   real*8 :: tnorm                                                
   integer :: ierr                                                
-  integer :: n,j,k,l                                               
+  integer :: n,j,k,l,ndof                                               
   !                                                                                                                                                                               
   tnorm=0.
+  ndof = 0
   do l=4,lmax-3
      do k=4,kmax-3
         do j=4,jmax-3
            do n = 1,5
               tnorm=tnorm+rhs(n,j,k,l)**2
+              ndof = ndof + 1
            enddo
         enddo
      enddo
   enddo
   !                                                                                                                                                                    
-  norm=sqrt( tnorm/(jmax*kmax*lmax*n) )
+  norm=sqrt( tnorm/ndof )
                               
   return
 end subroutine eval_two_norm
