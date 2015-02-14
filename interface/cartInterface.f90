@@ -7,11 +7,10 @@ module cartInterface
                                    getProcID
   !
   include 'mpif.h'
-  real*8, allocatable :: q(:,:,:,:),dq(:,:,:,:),x(:,:,:,:),spec(:,:,:)
-  real*8, allocatable :: qn(:,:,:,:),qnm1(:,:,:,:)
-  real*8, allocatable :: rhs(:,:,:,:),qstar(:,:,:,:) ,qwork(:,:,:,:),qq(:,:,:,:)
-  real*8, allocatable :: spaceMetric(:,:,:,:),timeMetric(:,:,:,:)
-  real*8, allocatable :: tscale(:,:,:)
+  real*8, allocatable :: q(:,:,:,:),x(:,:,:,:),spec(:,:,:)
+  real*8, allocatable :: qstar(:,:,:,:),qnm1(:,:,:,:),dq(:,:,:,:)
+  real*8, allocatable :: rhs(:,:,:,:),qwork(:,:,:,:)
+  real*8, allocatable :: timeMetric(:,:,:,:)
   !
   integer :: j,k,l,i,n,bctyp
   integer :: jmax,kmax,lmax,nsteps
@@ -204,24 +203,18 @@ contains
     !
     if (istor=='row') then
        allocate(q(nq,jmax,kmax,lmax),dq(nq,jmax,kmax,lmax),rhs(nq,jmax,kmax,lmax),x(3,jmax,kmax,lmax))
-       allocate(qn(nq,jmax,kmax,lmax),qnm1(nq,jmax,kmax,lmax))
+       allocate(qnm1(nq,jmax,kmax,lmax))
        allocate(spec(jmax,kmax,lmax))
        allocate(qstar(nq,jmax,kmax,lmax))
-       allocate(qq(nq,jmax,kmax,lmax))
        allocate(qwork(9,jmax,kmax,lmax))
-       allocate(spaceMetric(10,jmax,kmax,lmax))
        allocate(timeMetric(3,jmax,kmax,lmax))
-       allocate(tscale(jmax,kmax,lmax))
     else
        allocate(q(jmax,kmax,lmax,nq),dq(jmax,kmax,lmax,nq),rhs(jmax,kmax,lmax,nq),x(jmax,kmax,lmax,3))
-       allocate(qn(jmax,kmax,lmax,nq),qnm1(jmax,kmax,lmax,nq))
+       allocate(qnm1(jmax,kmax,lmax,nq))
        allocate(spec(jmax,kmax,lmax))
        allocate(qstar(jmax,kmax,lmax,nq))
-       allocate(qq(jmax,kmax,lmax,nq))
        allocate(qwork(jmax,kmax,lmax,9))
-       allocate(spaceMetric(jmax,kmax,lmax,10))
        allocate(timeMetric(jmax,kmax,lmax,3))
-       allocate(tscale(jmax,kmax,lmax))   
     endif
     !
     vol=dx*dy*dz
@@ -295,7 +288,7 @@ contains
        endif
     endif
     !
-    call init_metrics(spaceMetric,timeMetric,dx,dy,dz,jmax,kmax,lmax,istor)
+    call init_metrics(timeMetric,dx,dy,dz,jmax,kmax,lmax,istor)
     !
     if (timeIntegrator.eq.'ts') then
        iperiodic=(/0,0,0/)
@@ -308,16 +301,15 @@ contains
        call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
     endif
     if (icase.eq.'taylor-green') then
-       call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qq,qwork,dx,dy,dz,jmax,kmax,lmax,&
+       call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qwork,dx,dy,dz,jmax,kmax,lmax,&
             fluxOrder,istor)
     endif
     !
     !call storep3di(x,q,myid,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
     !
-    qn=q
+    qstar=q
     qnm1=q
     !
-    tscale=h
     tscal=h
     vol=dx*dy*dz
     a1=1./4/vol
@@ -388,7 +380,7 @@ contains
   !
   subroutine cart_bdf_source
     implicit none
-    rhs=rhs-(3d0*q-4d0*qn+qnm1)*dti !> bdf source term
+    rhs=rhs-(3d0*q-4d0*qstar+qnm1)*dti !> bdf source term
   end subroutine cart_bdf_source
   !
   !> update time
@@ -397,8 +389,8 @@ contains
     !call bc_case(q,nq,jmax,kmax,lmax,nf,icase,istor)
     n=n+1
     t=t+h
-    qnm1=qn
-    qn=q      
+    qnm1=qstar
+    qstar=q      
     tscal=(2d0/3d0)*h
   end subroutine cart_update_time
   !
@@ -410,7 +402,7 @@ contains
     t=t+h
     !
     if (icase.eq.'taylor-green') then
-       call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qq,qwork,dx,dy,dz,jmax,kmax,lmax,&
+       call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qwork,dx,dy,dz,jmax,kmax,lmax,&
             fluxOrder,istor)
     endif
     !
@@ -456,6 +448,8 @@ contains
        call filter(nq,nvar,jmax,kmax,lmax,q,qwork,fluxOrder,istor,filter_strength)
        call updateAllFringes(q,iperiodic,nf,jmax,kmax,lmax,nq)
     endif
+    if (myid==0 .and. mod(n-2,10)==0) &
+         write(6,*) '#       step              time              residual'
     if (myid==0) write(6,*) n-1,t,norm
     !
   end subroutine cart_step
@@ -476,7 +470,7 @@ contains
     !
     call updateAllFringes(rhs,iperiodic,nf,jmax,kmax,lmax,nq)
     if (it==1 .and. timeIntegrator .ne. 'ts') &
-     call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qq,qwork,dx,dy,dz,jmax,kmax,lmax,&
+     call compute_tke_params(nf,t,fsmach,rey,nq,nvar,gamma,q,qwork,dx,dy,dz,jmax,kmax,lmax,&
                              fluxOrder,istor)
     !
     if (ilhs.eq.0) then
@@ -558,16 +552,8 @@ contains
     if (writep3d) then
        if (timeIntegrator=='ts') then
           call storep3d_parallel(x,q,myid*1000+n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
-          !if (numprocs_spatial.eq.1) then
-          !else
-          !   if(myid.eq.0) then
-          !      write(6,*) "Grid and Solution files not written"
-          !      write(6,*) "Parallel I/O for Time-Spectral Calculations distributed in space coming"
-          !   endif
-          !endif
        else
-          call storep3d_parallel(x,qq,n-1,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
-          !call storep3d(x,q,n,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
+          call storep3d_parallel(x,q,n-1,fsmach,alpha,rey,totime,jmax,kmax,lmax,nq,nf,istor)
        endif
        !
     endif
@@ -578,7 +564,7 @@ contains
   subroutine cart_cleanup
     implicit none
     !
-    deallocate(q,dq,rhs,x,spaceMetric,spec,tscale)
+    deallocate(q,dq,rhs,x,qnm1,spec,qstar,qwork,timeMetric)
     call mpi_finalize(ierr)
     !
   end subroutine cart_cleanup

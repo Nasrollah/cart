@@ -66,7 +66,7 @@ contains
     call mpi_comm_size(mpi_comm_world,numprocs,ierr)
     call mpi_comm_size(cartComm,numprocs_spatial,ierr)
     !
-    if (myid.eq.0) write(*,*) "inside initSpatialComm"
+    !if (myid.eq.0) write(*,*) "inside initSpatialComm"
   end subroutine initSpatialComm
   !
   !> Get Proc Id

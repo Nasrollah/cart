@@ -218,11 +218,10 @@ end subroutine taylor_green
 !===============================================================================
 ! initialize metrics
 !===============================================================================
-subroutine init_metrics(spaceMetric,timeMetric,dx,dy,dz,jmax,kmax,lmax,istor)
+subroutine init_metrics(timeMetric,dx,dy,dz,jmax,kmax,lmax,istor)
 !
 implicit none
 integer, intent(in) :: jmax,kmax,lmax
-real*8, intent(inout) :: spaceMetric(10*jmax*kmax*lmax)
 real*8, intent(inout) :: timeMetric(3*jmax*kmax*lmax)
 real*8, intent(in) :: dx,dy,dz
 !
@@ -232,13 +231,7 @@ integer :: qskip,qmult,iq,iloc
 integer :: tskip,tmult,npts
 character*(*) :: istor
 !
-dxdy=dx*dy
-dydz=dy*dz
-dxdz=dx*dz
-dxdydz=dxdy*dz
-!
 npts=jmax*kmax*lmax
-call getstride(qskip,qmult,istor,npts,10)
 call getstride(tskip,tmult,istor,npts,3)
 !
 iq=0
@@ -247,17 +240,6 @@ do l=1,lmax
    do k=1,kmax
       do j=1,jmax
          iloc=iq*qmult+1
-         spaceMetric(iloc)=dydz
-         spaceMetric(iloc+qmult)=0d0
-         spaceMetric(iloc+2*qmult)=0d0
-         spaceMetric(iloc+3*qmult)=0d0
-         spaceMetric(iloc+4*qmult)=dxdz
-         spaceMetric(iloc+5*qmult)=0d0
-         spaceMetric(iloc+6*qmult)=0d0
-         spaceMetric(iloc+7*qmult)=0d0
-         spaceMetric(iloc+8*qmult)=dxdy
-         spaceMetric(iloc+9*qmult)=dxdydz
-         iloc=iq*tmult+1
          timeMetric(iloc)=0d0
          timeMetric(iloc+tskip)=0d0
          timeMetric(iloc+2*tskip)=0d0
